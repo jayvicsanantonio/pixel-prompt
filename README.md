@@ -66,7 +66,7 @@ Suggested stack direction:
 - Styling: a utility-first CSS layer or a lightweight component system with strong design tokens
 - State management: local UI state plus a predictable shared store for gameplay and async request state
 - Backend: framework-hosted API layer for game sessions, generation requests, scoring, and progress persistence
-- Database: relational database for users, levels, attempts, results, and progression
+- Database: relational database for levels, attempts, results, and progression
 - Asset storage: object storage for target image metadata and generated result references
 - Model adapters:
   - image generation provider abstraction
