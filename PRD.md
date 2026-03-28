@@ -569,7 +569,7 @@ Purpose:
 ### Security and Abuse Prevention
 
 - The system should validate prompt input on the server.
-- The system should protect generation and scoring endpoints from obvious abuse.
+- The system should protect generation and scoring endpoints from abuse through mechanisms such as rate limiting and input sanitization.
 - The app should avoid exposing internal provider credentials to the client.
 
 ### Extensibility
