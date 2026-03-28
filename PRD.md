@@ -484,7 +484,7 @@ Purpose:
 
 - Maximum of 3 scored attempts per level.
 - Invalid submissions do not consume an attempt.
-- Technical failures do not consume an attempt unless the attempt was actually scored and stored.
+- Technical failures do not consume an attempt. An attempt is only consumed once its result has been successfully scored and stored.
 
 ### Progression Rules
 
