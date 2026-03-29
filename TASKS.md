@@ -97,6 +97,8 @@ Must deliver:
 - final summary that shows levels completed, total attempts used, best scores, and improvement trend
 - replay entry points for completed levels
 - failure state that can surface strongest attempt score and concise advice
+- failure state that offers a restart-level action for failed levels
+- final summary that encourages replay or future content return
 - preservation of typed prompt on validation errors
 
 ### Agent 3: Backend and Game Systems Engineer
@@ -123,6 +125,7 @@ Owns:
 - attempt lifecycle rules
 - threshold pass/fail logic
 - retry and progression rules
+- failed-level restart logic
 - tip-selection orchestration
 - replay-safe progression invariants
 - analytics event emission
@@ -132,7 +135,9 @@ Must deliver:
 
 - persistent level progress and attempt history
 - best-score retention per level for UX and analytics
+- raw and normalized score storage for future threshold tuning
 - server APIs or actions for gameplay state transitions
+- restart-level flow that resets a failed level's attempts without deleting prior attempt history or analytics
 - runtime tip-selection engine that consumes attempt context, score signals, and Agent 5 tip rules
 - normalized event schema for product metrics
 - safe failure and retry behavior for technical errors
@@ -171,6 +176,7 @@ Must deliver:
 - evaluation notes for score behavior and failure modes
 - guidance for handling interrupted generation requests and provider timeouts
 - evaluation notes for inconsistent but visually acceptable matches
+- documented behavior for technically successful but low-quality or off-topic provider outputs on otherwise reasonable prompts
 
 ### Agent 5: Content, QA, and Telemetry Operator
 
@@ -204,6 +210,7 @@ Must deliver:
 - QA coverage plan for gameplay, replay, resume, and failure states
 - evaluation notes for threshold fairness and content difficulty
 - draft UX copy for landing, input, generating, result, success, failure, replay, and summary states
+- failure-state and summary copy that is encouraging, non-punitive, and invites replay or future return
 
 ## Ownership Boundaries
 
@@ -233,9 +240,13 @@ Unless explicitly changed later, the MVP uses these fixed values and behaviors:
 - maximum scored attempts per level: 3
 - seeded thresholds: Level 1 = 50, Level 2 = 60, Level 3 = 70
 - target image stays visible throughout prompt writing
+- target images are static per level in MVP
 - player-facing scores are displayed as percentages
+- players see only the aggregate percentage score in MVP; internal score breakdowns and reasoning fields are not player-facing
+- MVP uses binary pass/fail at the level threshold; medal tiers are deferred
 - progress persistence is anonymous and server-persisted via a lightweight session identifier; account support is out of scope for MVP
 - generated attempt images use durable storage rather than ephemeral provider URLs, with retention policy documented in Phase 0
+- technically successful but low-quality or off-topic provider outputs are still scored in MVP; provider retries and manual overrides are deferred
 
 ## Cross-Cutting Acceptance Criteria
 
@@ -246,6 +257,7 @@ These requirements apply across all phases and should be treated as non-negotiab
 - invalid submissions do not consume attempts
 - technical failures, provider timeouts, and scoring failures do not consume attempts
 - interrupted generation requests resolve to a recovered pending state or a refunded attempt
+- failed levels can be restarted with a fresh attempt cycle while preserving prior attempt history and analytics
 - replaying completed levels never reduces unlocked progression
 - best score per level is retained for UX and analytics
 
@@ -254,16 +266,19 @@ These requirements apply across all phases and should be treated as non-negotiab
 - empty prompts and over-limit prompts are blocked in both client and server validation
 - typed prompt text is preserved when validation fails
 - keyboard-first submission and retry flow exists for the core gameplay loop
+- the landing experience communicates the premise on first visit without a tutorial wall or multi-step modal sequence
 - level number and required threshold are visible during active play
 - the target image remains visible throughout prompt writing in MVP
 - result states use a clear comparison layout between target and generated images
 - player-facing scores are shown as percentages
 - failure states show the strongest attempt score and concise advice
+- failure-state copy is encouraging and non-punitive
 - final summary shows levels completed, total attempts used, best scores, and improvement trend
+- final summary encourages replay or future content return
 
 ### Content and Tip Quality
 
-- level schema supports category, difficulty, and theme metadata
+- level schema supports category, difficulty, theme, and future pack/group metadata
 - retry tips cover medium, subject, context, style, materials, textures, shapes, composition, and time period or artistic era
 - UI copy remains short, concrete, and understandable to beginners
 
@@ -334,9 +349,10 @@ Tasks:
 - document the MVP persistence model and anonymous identity/session strategy
 - scaffold the app and repository structure
 - define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
-- define content file format for levels, tip rules, and metadata fields such as category, difficulty, and theme
+- define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
 - encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
 - define provider interfaces for generation and scoring
+- define MVP score transparency rules so only the aggregate percentage is player-facing
 - define event schema for analytics and map it to the PRD metrics
 - configure analytics SDK and infrastructure boundaries
 - define deployment, staging, and preview environment assumptions
@@ -368,14 +384,15 @@ Tasks for Agent 2:
 - define score presentation as a player-facing percentage display
 - implement a clear comparison layout for target and generated images in result states
 - ensure failure UI can surface strongest attempt score and concise advice
+- implement restart-level CTA and flow from the failure state
 - implement responsive behavior for mobile, tablet, and desktop breakpoints
 - wire the UI to mocked server contracts first
 - add frontend tests for validation, retry, replay, and failure-state behavior
 
 Tasks for Agent 3:
 
-- implement persistence schema, including best score retention and replay-safe progression fields
-- implement session, attempt, progression, and replay logic
+- implement persistence schema, including raw and normalized score storage, best score retention, and replay-safe progression fields
+- implement session, attempt, progression, replay, and failed-level restart logic
 - implement submit-attempt and resume-progress endpoints
 - implement durable generated-asset reference persistence if resume/history requires it
 - enforce attempt fairness so invalid submissions and technical failures do not decrement attempts
@@ -392,6 +409,7 @@ Tasks for Agent 4:
 - define provider failure behavior, timeout behavior, and interrupted-request signals
 - create deterministic fixtures for scoring and integration tests
 - evaluate scoring consistency on visually acceptable matches
+- document expected scoring behavior for low-quality or off-topic provider outputs that are technically successful
 
 Tasks for Agent 5:
 
@@ -401,6 +419,7 @@ Tasks for Agent 5:
 - author QA matrix that enumerates all PRD edge cases and assigns ownership
 - define copy guidelines for short, concrete, beginner-friendly UX text
 - draft UX copy for all MVP states and CTA labels
+- draft non-punitive failure copy and replay-or-return encouragement for the final summary
 
 Exit criteria:
 
@@ -426,6 +445,7 @@ Tasks:
 - connect frontend submission flow to real backend endpoint
 - connect backend attempt processing to generation and scoring adapters
 - display real score, pass/fail state, retry tips, and strongest-attempt context on failure
+- connect restart-level UI and backend flow so failed levels can be retried immediately
 - wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
 - decrement attempts only after valid scored submissions
 - persist best score, attempt history, and unlocked level progression
@@ -451,6 +471,7 @@ Tasks:
 
 - implement final completion summary with levels completed, attempts used, best scores, and improvement trend
 - implement multi-level progression with unlocks and replay of completed levels
+- ensure failed levels offer a restart path without soft-locking progression
 - surface replay entry points without regressing unlocked progression
 - validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
 - ensure analytics cover the full gameplay funnel and the PRD-defined success metrics
@@ -480,7 +501,7 @@ Support:
 Tasks:
 
 - add abuse controls and rate limiting
-- verify accessibility, keyboard navigation, color contrast, and non-color state signaling
+- verify accessibility, keyboard navigation across all interactive screens, color contrast, and non-color state signaling
 - run copy audit for short, concrete, beginner-friendly language
 - improve loading and failure states
 - verify responsive behavior across mobile, tablet, and desktop breakpoints
@@ -528,12 +549,12 @@ Exit criteria:
 - content schema
 - analytics payload schema
 - MVP acceptance criteria
-- metadata requirements for category, difficulty, and theme
+- metadata requirements for category, difficulty, theme, and future pack/group support
 
 ### Agent 4 -> Agent 3
 
 - generation request and result format
-- score payload and normalization fields
+- raw score payload, normalization fields, and storage requirements
 - provider failure signals and retry-safe behavior
 - timeout and interrupted-request recovery signals
 - score breakdown signals required for tip selection
@@ -541,7 +562,7 @@ Exit criteria:
 ### Agent 3 -> Agent 2
 
 - stable gameplay endpoints
-- response shapes for result, retry, resume, replay, and summary states
+- response shapes for result, retry, restart, resume, replay, and summary states
 - historical attempt context needed to surface strongest attempt score on failure
 - error and validation response shapes
 
@@ -558,6 +579,7 @@ Exit criteria:
 - summary metrics and coaching copy constraints
 - UX copy review guidance for beginner-friendly messaging
 - drafted UX copy for MVP states
+- non-punitive failure copy and replay-or-return encouragement
 
 ### Agent 5 -> Agent 3
 
@@ -574,6 +596,7 @@ Exit criteria:
 - Agent 4 should create deterministic fixtures early so the rest of the system is testable without full live-model dependency.
 - Agent 5 should define the initial content pack and event taxonomy before the first integration pass.
 - the tip-selection engine should be integrated before content tuning is considered complete.
+- restart-level flow should be implemented before failure-state polish is considered complete.
 - edge-case recovery rules should be implemented before broad polish work begins.
 - Agent 1 should only take back implementation work when a contract conflict or architecture change blocks multiple agents.
 
@@ -591,16 +614,20 @@ The PRD is considered implemented at MVP level when:
 
 - a user can start or resume a session
 - the user can play through a curated sequence of levels
+- failed levels can be restarted immediately without losing prior attempt history
 - completed levels can be replayed without reducing unlocked progression
 - each valid submission generates an image, receives a normalized score, and returns pass/fail
 - the active level UI shows the target image, required threshold, attempts remaining, and level number
 - result screens compare the target image against the generated image in a clear side-by-side or equivalent layout
 - failed attempts return actionable retry tips
 - failure after all attempts shows the strongest attempt score and concise advice
+- failure after all attempts offers a restart path and does not soft-lock the player
 - attempts, best scores, and unlocked progress persist correctly
+- raw and normalized scores are both stored for tuning and analytics
 - invalid submissions and technical failures do not consume attempts
 - the final completion summary is shown at the end of the level set
 - the final completion summary includes levels completed, attempts used, best scores, and improvement trend
+- the final completion summary encourages replay or future content return
 - key analytics events are emitted across the full loop and map cleanly to the PRD metrics
 - major technical failures are handled without corrupting progress
 
