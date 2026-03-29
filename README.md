@@ -216,33 +216,44 @@ Not required for MVP:
 
 ## Local Setup
 
-This repository is currently at the planning stage. Replace this section once the initial application scaffold exists.
-
-Suggested placeholders to fill in later:
-
 ### Prerequisites
 
-- Runtime version
-- Package manager
-- Database requirements
-- Environment variables
+- Node.js 22.x was used to verify the current scaffold
+- `pnpm` 10.33.0
+- PostgreSQL for later backend tasks
+- AWS credentials and S3 buckets for later asset-storage tasks
+- OpenAI credentials for later generation and scoring tasks
+
+The current scaffold boots without external service credentials. Analytics is a no-op when PostHog variables are unset.
 
 ### Install
 
 ```bash
-# add installation steps once the app scaffold exists
+pnpm install
+cp .env.example .env.local
 ```
 
 ### Run the App
 
 ```bash
-# add local dev startup commands
+pnpm dev
 ```
+
+Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ### Run Tests
 
 ```bash
-# add unit, integration, and end-to-end test commands
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Optional browser coverage:
+
+```bash
+pnpm test:e2e
 ```
 
 ## Development Workflow Suggestions
