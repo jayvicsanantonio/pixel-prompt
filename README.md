@@ -73,6 +73,18 @@ Suggested stack direction:
   - similarity scoring provider abstraction
 - Analytics: event-based product analytics pipeline
 
+## Phase 0 Stack Decisions
+
+The first execution task is now decided and documented.
+
+- Framework: Next.js App Router with React and TypeScript
+- Package manager: pnpm
+- Database: PostgreSQL with Drizzle ORM and `drizzle-kit` migrations
+- Analytics provider: PostHog
+- Testing stack: Vitest, React Testing Library, and Playwright
+
+Detailed rationale and guardrails live in `docs/foundation/stack-decisions.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:

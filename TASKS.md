@@ -350,21 +350,21 @@ Support:
 
 Tasks:
 
-- choose the framework, package manager, database, analytics provider, and testing stack
-- choose baseline AI providers and models for generation and scoring
-- choose the asset storage strategy for target images and generated outputs
-- document the generated-image retention policy and storage lifecycle
-- document the MVP persistence model and anonymous identity/session strategy
-- scaffold the app and repository structure
-- define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
-- define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
-- encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
-- define provider interfaces for generation and scoring
-- define MVP score transparency rules so only the aggregate percentage is player-facing
-- define event schema for analytics and map it to the PRD metrics
-- configure analytics SDK and infrastructure boundaries
-- define deployment, staging, and preview environment assumptions
-- write local setup instructions into `README.md`
+1. [x] choose the framework, package manager, database, analytics provider, and testing stack (`Next.js App Router`, `pnpm`, `PostgreSQL + Drizzle`, `PostHog`, `Vitest + React Testing Library + Playwright`)
+2. [ ] choose baseline AI providers and models for generation and scoring
+3. [ ] choose the asset storage strategy for target images and generated outputs
+4. [ ] document the generated-image retention policy and storage lifecycle
+5. [ ] document the MVP persistence model and anonymous identity/session strategy
+6. [ ] scaffold the app and repository structure
+7. [ ] define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
+8. [ ] define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
+9. [ ] encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
+10. [ ] define provider interfaces for generation and scoring
+11. [ ] define MVP score transparency rules so only the aggregate percentage is player-facing
+12. [ ] define event schema for analytics and map it to the PRD metrics
+13. [ ] configure analytics SDK and infrastructure boundaries
+14. [ ] define deployment, staging, and preview environment assumptions
+15. [ ] write local setup instructions into `README.md`
 
 Exit criteria:
 
