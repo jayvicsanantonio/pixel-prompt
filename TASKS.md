@@ -362,7 +362,7 @@ Tasks:
 10. [x] define provider interfaces for generation and scoring
 11. [x] define MVP score transparency rules so only the aggregate percentage is player-facing
 12. [x] define event schema for analytics and map it to the PRD metrics
-13. [ ] configure analytics SDK and infrastructure boundaries
+13. [x] configure analytics SDK and infrastructure boundaries
 14. [ ] define deployment, staging, and preview environment assumptions
 15. [ ] write local setup instructions into `README.md`
 

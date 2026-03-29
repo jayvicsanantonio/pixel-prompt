@@ -179,3 +179,25 @@ export interface ProviderTelemetry {
 export function defineAnalyticsEvent<T extends AnalyticsEvent>(event: T) {
   return analyticsEventSchema.parse(event) as T;
 }
+
+export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
+  if (event.anonymousPlayerId) {
+    return event.anonymousPlayerId;
+  }
+
+  if ("runId" in event) {
+    return `run:${event.runId}`;
+  }
+
+  return "anonymous";
+}
+
+export function toAnalyticsCaptureInput(event: AnalyticsEvent) {
+  const { name, ...properties } = event;
+
+  return {
+    distinctId: resolveAnalyticsDistinctId(event),
+    event: name,
+    properties,
+  };
+}
