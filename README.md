@@ -95,6 +95,16 @@ The second execution task is now decided and documented.
 
 Detailed rationale, source links, and fallback notes live in `docs/foundation/ai-provider-decisions.md`.
 
+## Phase 0 Asset Storage Decision
+
+The third execution task is now decided and documented.
+
+- Storage provider: Amazon S3
+- Target assets: versioned bucket for curated level images
+- Generated outputs: private bucket for player attempt images served through signed access
+
+Detailed rationale and access-pattern notes live in `docs/foundation/asset-storage-decision.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:

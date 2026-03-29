@@ -352,7 +352,7 @@ Tasks:
 
 1. [x] choose the framework, package manager, database, analytics provider, and testing stack (`Next.js App Router`, `pnpm`, `PostgreSQL + Drizzle`, `PostHog`, `Vitest + React Testing Library + Playwright`)
 2. [x] choose baseline AI providers and models for generation and scoring (`OpenAI`, `gpt-image-1.5` for generation, `gpt-5.4 mini` for scoring)
-3. [ ] choose the asset storage strategy for target images and generated outputs
+3. [x] choose the asset storage strategy for target images and generated outputs (`Amazon S3`, separate target-asset and generated-output buckets)
 4. [ ] document the generated-image retention policy and storage lifecycle
 5. [ ] document the MVP persistence model and anonymous identity/session strategy
 6. [ ] scaffold the app and repository structure
