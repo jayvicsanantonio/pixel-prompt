@@ -115,6 +115,16 @@ The fourth execution task is now decided and documented.
 
 Detailed lifecycle rules live in `docs/foundation/asset-retention-policy.md`.
 
+## Phase 0 Persistence Decision
+
+The fifth execution task is now decided and documented.
+
+- Progress is server-persisted in PostgreSQL
+- Identity is anonymous and browser-scoped in MVP
+- Resume is driven by an opaque HTTP-only session cookie
+
+Detailed persistence and session rules live in `docs/foundation/persistence-model.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:
