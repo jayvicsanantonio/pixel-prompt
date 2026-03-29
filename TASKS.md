@@ -35,6 +35,8 @@ Owns:
 - shared types and domain model
 - provider interfaces for generation and scoring
 - content and analytics contract definitions
+- asset storage strategy for target and generated images
+- analytics provider and SDK setup
 - environment variable contract
 - error model and loading-state conventions
 - local development workflow
@@ -46,6 +48,9 @@ Must deliver:
 - folder structure for app, server, content, and tests
 - typed contract for levels, attempts, scores, and progress
 - API boundaries for submit-attempt, resume-progress, and analytics ingestion
+- baseline AI provider and model selection for generation and scoring
+- asset storage decision for durable target and generated image references
+- analytics provider configuration plan
 - MVP slice plan
 - dependency map and integration sequence
 
@@ -80,6 +85,9 @@ Must deliver:
 - UX copy slots that can consume content and tip rules
 - frontend validation states
 - loading, error, and empty-state handling
+- replay entry points for completed levels
+- failure state that can surface strongest attempt score and concise advice
+- preservation of typed prompt on validation errors
 
 ### Agent 3: Backend and Game Systems Engineer
 
@@ -101,18 +109,23 @@ Owns:
 
 - database schema and migrations
 - session and progress persistence
+- generated asset reference persistence
 - attempt lifecycle rules
 - threshold pass/fail logic
 - retry and progression rules
+- replay-safe progression invariants
 - analytics event emission
 - rate limiting and server-side validation
 
 Must deliver:
 
 - persistent level progress and attempt history
+- best-score retention per level for UX and analytics
 - server APIs or actions for gameplay state transitions
 - normalized event schema for product metrics
 - safe failure and retry behavior for technical errors
+- attempt-consumption rules that do not decrement on invalid submissions or technical failures
+- replay support that never reduces unlocked progression
 - tests for progression, attempt consumption, and resume logic
 
 ### Agent 4: AI and Scoring Systems Engineer
@@ -144,6 +157,8 @@ Must deliver:
 - one working scoring strategy with normalized 0-100 outputs
 - scoring payloads that the backend and UX can consume safely
 - evaluation notes for score behavior and failure modes
+- guidance for handling interrupted generation requests and provider timeouts
+- evaluation notes for inconsistent but visually acceptable matches
 
 ### Agent 5: Content, QA, and Telemetry Operator
 
@@ -171,9 +186,10 @@ Owns:
 Must deliver:
 
 - initial curated level set with thresholds
-- rule-based retry tips for missing visual specificity
-- analytics event definitions tied to product metrics
-- QA coverage plan for gameplay, resume, and failure states
+- content schema population including category, difficulty, and theme metadata
+- rule-based retry tips for missing visual specificity across medium, subject, context, style, materials, textures, shapes, composition, and time period or artistic era
+- analytics event definitions explicitly mapped to PRD funnel, learning, and operational metrics
+- QA coverage plan for gameplay, replay, resume, and failure states
 - evaluation notes for threshold fairness and content difficulty
 
 ## Ownership Boundaries
@@ -193,6 +209,77 @@ Shared rules:
 - provider-specific logic stays behind adapter interfaces.
 - analytics names and payloads are defined once and reused everywhere.
 - content, thresholds, and tip rules live in structured data rather than feature code.
+- provider credentials remain server-only and are never exposed to the client.
+- generated assets required for resume or history must have durable references.
+
+## Cross-Cutting Acceptance Criteria
+
+These requirements apply across all phases and should be treated as non-negotiable acceptance checks:
+
+### Gameplay Fairness
+
+- invalid submissions do not consume attempts
+- technical failures, provider timeouts, and scoring failures do not consume attempts
+- interrupted generation requests resolve to a recovered pending state or a refunded attempt
+- replaying completed levels never reduces unlocked progression
+- best score per level is retained for UX and analytics
+
+### Prompt and Interaction UX
+
+- empty prompts and over-limit prompts are blocked in both client and server validation
+- typed prompt text is preserved when validation fails
+- keyboard-first submission and retry flow exists for the core gameplay loop
+- failure states show the strongest attempt score and concise advice
+
+### Content and Tip Quality
+
+- level schema supports category, difficulty, and theme metadata
+- retry tips cover medium, subject, context, style, materials, textures, shapes, composition, and time period or artistic era
+- UI copy remains short, concrete, and understandable to beginners
+
+### Reliability and Resume
+
+- refresh during generation does not corrupt progress
+- stored progress that references removed or unavailable levels recovers to the nearest valid state
+- generation success plus scoring failure, asset display failure, and network interruption all fail visibly and recover cleanly
+
+### Analytics and Operational Observability
+
+- analytics events explicitly support the PRD metrics for funnel conversion, abandonment, retries, score improvement, prompt length, generation/scoring success, attempt latency, and technical failure rate
+- event integrity is verified in both happy-path and failure-path flows
+
+### Security and Accessibility
+
+- provider credentials remain server-side only
+- color contrast and non-color state signaling are validated before launch
+- important UI states are accessible through keyboard navigation and understandable screen messaging
+
+## Explicit PRD Edge Case Checklist
+
+These cases must be represented in the QA matrix, assigned during implementation, and covered before launch:
+
+- empty prompt submission: Agent 2 for client validation, Agent 3 for server validation
+- prompt exceeds character limit: Agent 2 for client validation, Agent 3 for server validation
+- player refreshes during generation: Agent 3 and Agent 4 define recovery or refund behavior
+- generation succeeds but scoring fails: Agent 3 and Agent 4 handle retry-safe recovery
+- scoring succeeds but generated asset cannot be displayed: Agent 2 and Agent 3 surface recoverable UI state
+- network interruption during submission: Agent 2 and Agent 3 preserve user state and avoid corrupt progress
+- player exits mid-level and later resumes: Agent 3 owns durable restore behavior
+- stored progress references a removed or unavailable level: Agent 3 recovers to nearest valid state, Agent 5 verifies content migration expectations
+- target image proves too difficult for its threshold: Agent 5 owns tuning, Agent 4 supports score-signal review
+- similarity scoring is inconsistent for visually acceptable matches: Agent 4 owns evaluation, Agent 5 owns tuning response
+- prompt is valid but intentionally nonsensical: Agent 4 and Agent 5 verify scoring and tip behavior remain reasonable
+- rapid retry or double-submit: Agent 3 owns idempotency and duplicate-submit protection
+- service rate limits or provider timeouts occur: Agent 3 and Agent 4 own graceful degradation and retry-safe behavior
+
+## Analytics Coverage Requirements
+
+The analytics event dictionary must support the PRD metrics at minimum:
+
+- Core product metrics: landing-to-start conversion, level start rate, prompt submission rate, attempt completion rate, pass rate by level, retry rate by level, abandonment rate, resume rate, and full-run completion rate
+- Learning and quality metrics: average attempts to pass, median best score by level, score improvement from first attempt to best attempt, percentage of players who improve after tips, and prompt length distribution
+- Operational metrics: generation success rate, scoring success rate, end-to-end attempt latency, and technical failure rate per attempt
+- Early success review: event outputs must support evaluation of whether users start quickly, complete at least one attempt, retry after failure, and improve on later attempts
 
 ## Phase Plan
 
@@ -210,12 +297,15 @@ Support:
 
 Tasks:
 
-- choose the framework, package manager, database, and testing stack
+- choose the framework, package manager, database, analytics provider, and testing stack
+- choose baseline AI providers and models for generation and scoring
+- choose the asset storage strategy for target images and generated outputs
 - scaffold the app and repository structure
 - define shared TypeScript types for level, attempt, score, result, and progress
-- define content file format for levels and tip rules
+- define content file format for levels, tip rules, and metadata fields such as category, difficulty, and theme
 - define provider interfaces for generation and scoring
-- define event schema for analytics
+- define event schema for analytics and map it to the PRD metrics
+- configure analytics SDK and infrastructure boundaries
 - write local setup instructions into `README.md`
 
 Exit criteria:
@@ -223,6 +313,7 @@ Exit criteria:
 - repo boots locally
 - shared contracts compile
 - all agents can build against the same interfaces
+- provider, storage, and analytics decisions are documented
 
 ### Phase 1: Parallel MVP Slice Development
 
@@ -237,30 +328,39 @@ Tasks for Agent 2:
 
 - build landing page and start/resume states
 - build active level screen and prompt input
-- build generating, result, retry, success, failure, and summary states
+- preserve typed prompt on validation errors and support keyboard-first input flow in the core loop
+- build generating, result, retry, success, failure, replay, and summary states
+- ensure failure UI can surface strongest attempt score and concise advice
 - wire the UI to mocked server contracts first
+- add frontend tests for validation, retry, replay, and failure-state behavior
 
 Tasks for Agent 3:
 
-- implement persistence schema
-- implement session, attempt, and progression logic
+- implement persistence schema, including best score retention and replay-safe progression fields
+- implement session, attempt, progression, and replay logic
 - implement submit-attempt and resume-progress endpoints
+- implement durable generated-asset reference persistence if resume/history requires it
+- enforce attempt fairness so invalid submissions and technical failures do not decrement attempts
+- implement double-submit protection and request idempotency
 - implement analytics emission points
+- add business-rule tests for attempt consumption, replay, and resume behavior
 
 Tasks for Agent 4:
 
 - integrate one generation path
 - integrate one scoring path
 - define normalized score outputs and reasoning fields
-- define provider failure behavior and fallback signals
+- define provider failure behavior, timeout behavior, and interrupted-request signals
 - create deterministic fixtures for scoring and integration tests
+- evaluate scoring consistency on visually acceptable matches
 
 Tasks for Agent 5:
 
-- create initial levels and threshold values
-- define first-pass retry tip heuristics
-- define analytics event dictionary and acceptance checks
-- author QA matrix for edge cases and fairness reviews
+- create initial levels and threshold values with category, difficulty, and theme metadata
+- define first-pass retry tip heuristics across all PRD visual-detail categories
+- define analytics event dictionary mapped to the PRD metrics and acceptance checks
+- author QA matrix that enumerates all PRD edge cases and assigns ownership
+- define copy guidelines for short, concrete, beginner-friendly UX text
 
 Exit criteria:
 
@@ -269,6 +369,7 @@ Exit criteria:
 - backend rules pass tests
 - provider layer produces stable payloads
 - content pack, telemetry schema, and QA matrix exist
+- acceptance criteria for prompt validation, attempts, replay, and failure handling are testable
 
 ### Phase 2: First End-to-End Playable Loop
 
@@ -284,15 +385,17 @@ Tasks:
 
 - connect frontend submission flow to real backend endpoint
 - connect backend attempt processing to generation and scoring adapters
-- display real score, pass/fail state, and retry tips
+- display real score, pass/fail state, retry tips, and strongest-attempt context on failure
 - decrement attempts only after valid scored submissions
 - persist best score, attempt history, and unlocked level progression
+- recover safely from refresh or disconnect during generation
 - verify gameplay events and QA the happy-path plus core failure-path loop
 
 Exit criteria:
 
 - a player can start Level 1, submit a prompt, receive a score, retry, pass or fail, and resume later
 - the happy path and core failure path are both validated
+- invalid submissions and technical failures do not reduce attempts
 
 ### Phase 3: Full MVP Completion
 
@@ -306,12 +409,13 @@ Primary owners:
 Tasks:
 
 - implement final completion summary
-- implement multi-level progression with unlocks
-- validate resume behavior across refresh and return sessions
-- ensure analytics cover the full gameplay funnel
+- implement multi-level progression with unlocks and replay of completed levels
+- surface replay entry points without regressing unlocked progression
+- validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
+- ensure analytics cover the full gameplay funnel and the PRD-defined success metrics
 - tune thresholds and tip rules across the initial curated level set
-- add failure handling for generation, scoring, and network issues
-- run structured QA across the full level set
+- add failure handling for generation, scoring, asset-display, network, and provider rate-limit issues
+- run structured QA across the full level set, including nonsensical-but-valid prompts and scoring inconsistency reviews
 
 Exit criteria:
 
@@ -319,6 +423,7 @@ Exit criteria:
 - progression and resume behavior are stable
 - analytics and edge-case handling are in place
 - content difficulty and score fairness have been reviewed
+- replay works without reducing unlocked progression
 
 ### Phase 4: Hardening and Launch Readiness
 
@@ -334,11 +439,15 @@ Support:
 Tasks:
 
 - add abuse controls and rate limiting
-- verify accessibility and keyboard navigation
+- verify accessibility, keyboard navigation, color contrast, and non-color state signaling
+- run copy audit for short, concrete, beginner-friendly language
 - improve loading and failure states
 - add deterministic test fixtures for gameplay logic
+- validate end-to-end attempt latency and perceived responsiveness during model requests
+- verify progress-corruption protection across refresh and network interruption
 - review score fairness on hard levels
 - verify event integrity against product metrics
+- verify provider credentials and secrets remain server-only
 - clean up developer docs and deployment assumptions
 
 Exit criteria:
@@ -361,28 +470,33 @@ Exit criteria:
 - persistence model assumptions
 - error contract
 - analytics payload schema
+- asset storage strategy and replay invariants
 
 ### Agent 1 -> Agent 4
 
 - provider interface contract
 - result payload shape expected by the backend and UI
+- chosen baseline providers and model assumptions
 
 ### Agent 1 -> Agent 5
 
 - content schema
 - analytics payload schema
 - MVP acceptance criteria
+- metadata requirements for category, difficulty, and theme
 
 ### Agent 4 -> Agent 3
 
 - generation request and result format
 - score payload and normalization fields
 - provider failure signals and retry-safe behavior
+- timeout and interrupted-request recovery signals
 
 ### Agent 3 -> Agent 2
 
 - stable gameplay endpoints
-- response shapes for result, retry, resume, and summary states
+- response shapes for result, retry, resume, replay, and summary states
+- historical attempt context needed to surface strongest attempt score on failure
 - error and validation response shapes
 
 ### Agent 4 -> Agent 5
@@ -396,12 +510,14 @@ Exit criteria:
 - content metadata for levels
 - tip categories and copy constraints
 - summary metrics and coaching copy constraints
+- UX copy review guidance for beginner-friendly messaging
 
 ### Agent 5 -> Agent 3
 
 - analytics event dictionary
 - QA assertions for progression and resume behavior
 - content IDs, thresholds, and tip rule references
+- explicit edge-case checklist for backend recovery behavior
 
 ## Parallel Work Rules
 
@@ -409,6 +525,7 @@ Exit criteria:
 - Agent 3 should own business rules in tests before wiring live providers.
 - Agent 4 should create deterministic fixtures early so the rest of the system is testable without full live-model dependency.
 - Agent 5 should define the initial content pack and event taxonomy before the first integration pass.
+- edge-case recovery rules should be implemented before broad polish work begins.
 - Agent 1 should only take back implementation work when a contract conflict or architecture change blocks multiple agents.
 
 ## Recommended Order of Work
@@ -425,20 +542,24 @@ The PRD is considered implemented at MVP level when:
 
 - a user can start or resume a session
 - the user can play through a curated sequence of levels
+- completed levels can be replayed without reducing unlocked progression
 - each valid submission generates an image, receives a normalized score, and returns pass/fail
 - failed attempts return actionable retry tips
+- failure after all attempts shows the strongest attempt score and concise advice
 - attempts, best scores, and unlocked progress persist correctly
+- invalid submissions and technical failures do not consume attempts
 - the final completion summary is shown at the end of the level set
-- key analytics events are emitted across the full loop
+- key analytics events are emitted across the full loop and map cleanly to the PRD metrics
 - major technical failures are handled without corrupting progress
 
 ## Immediate Next Tasks
 
 The first concrete tasks for the repo should be:
 
-- choose and scaffold the app stack
+- choose and scaffold the app stack, analytics provider, and baseline AI providers
+- choose the asset storage strategy for target and generated images
 - create the shared domain types and level content schema
-- define the analytics event taxonomy and QA acceptance matrix
+- define the analytics event taxonomy, PRD metric mapping, and QA acceptance matrix
 - create the first 3 seeded levels with target-image placeholders
 - implement mocked attempt submission so the frontend loop can be built before provider wiring
 - add `README.md` setup instructions once the scaffold exists
