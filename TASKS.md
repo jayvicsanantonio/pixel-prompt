@@ -358,7 +358,7 @@ Tasks:
 6. [x] scaffold the app and repository structure (Next.js app shell, test configs, server/content/test folders, reproducible `pnpm` lockfile)
 7. [x] define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
 8. [x] define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
-9. [ ] encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
+9. [x] encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
 10. [ ] define provider interfaces for generation and scoring
 11. [ ] define MVP score transparency rules so only the aggregate percentage is player-facing
 12. [ ] define event schema for analytics and map it to the PRD metrics

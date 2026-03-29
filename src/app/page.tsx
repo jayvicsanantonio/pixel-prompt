@@ -1,3 +1,4 @@
+import { levels } from "@/content";
 import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT } from "@/lib/game";
 import styles from "./page.module.css";
 
@@ -64,6 +65,17 @@ export default function Home() {
           <ul className={styles.list}>
             {repoAreas.map((area) => (
               <li key={area}>{area}</li>
+            ))}
+          </ul>
+        </article>
+
+        <article className={styles.panel}>
+          <h2>Seeded thresholds</h2>
+          <ul className={styles.list}>
+            {levels.map((level) => (
+              <li key={level.id}>
+                Level {level.number}: {level.threshold}%
+              </li>
             ))}
           </ul>
         </article>
