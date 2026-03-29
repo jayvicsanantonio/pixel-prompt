@@ -1,0 +1,104 @@
+.page {
+  width: min(1100px, calc(100vw - 2rem));
+  margin: 0 auto;
+  padding: 4rem 0 5rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.hero,
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.62)),
+    var(--panel);
+  box-shadow: 0 24px 60px rgba(42, 32, 24, 0.1);
+  backdrop-filter: blur(18px);
+}
+
+.hero {
+  padding: 2.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.eyebrow {
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.hero h1,
+.panel h2,
+.card h3 {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+}
+
+.hero h1 {
+  font-size: clamp(3rem, 8vw, 5.4rem);
+  line-height: 0.94;
+  letter-spacing: -0.05em;
+}
+
+.summary {
+  max-width: 44rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.panel {
+  padding: 1.6rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.pillars,
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.pillars {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.card {
+  padding: 1.25rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(84, 68, 56, 0.12);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.card p,
+.list {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.list {
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .page {
+    width: min(100vw - 1rem, 1100px);
+    padding-top: 2.5rem;
+  }
+
+  .hero,
+  .panel {
+    border-radius: 22px;
+    padding: 1.25rem;
+  }
+}
