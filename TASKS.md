@@ -92,7 +92,9 @@ Must deliver:
 - frontend validation states
 - loading, error, and empty-state handling
 - active level UI that keeps the target image visible during prompt writing and shows level number, attempts remaining, and required score threshold
+- active level UI that avoids clutter which distracts from image observation
 - result UI that presents the target image and generated image side by side or in an equally clear comparison layout
+- mobile-friendly target image inspection, such as tap-to-expand or an equivalent zoomed study view
 - player-facing score display as a percentage
 - final summary that shows levels completed, total attempts used, best scores, and improvement trend
 - replay entry points for completed levels
@@ -134,6 +136,7 @@ Owns:
 Must deliver:
 
 - persistent level progress and attempt history
+- attempt schema that stores prompt text, generated image reference, and generation metadata such as provider, model version, and seed when available
 - best-score retention per level for UX and analytics
 - raw and normalized score storage for future threshold tuning
 - server APIs or actions for gameplay state transitions
@@ -177,6 +180,7 @@ Must deliver:
 - guidance for handling interrupted generation requests and provider timeouts
 - evaluation notes for inconsistent but visually acceptable matches
 - documented behavior for technically successful but low-quality or off-topic provider outputs on otherwise reasonable prompts
+- structured handling for provider content-policy rejections so they surface cleanly and do not consume attempts
 
 ### Agent 5: Content, QA, and Telemetry Operator
 
@@ -255,6 +259,7 @@ These requirements apply across all phases and should be treated as non-negotiab
 ### Gameplay Fairness
 
 - invalid submissions do not consume attempts
+- provider content-policy rejections do not consume attempts
 - technical failures, provider timeouts, and scoring failures do not consume attempts
 - interrupted generation requests resolve to a recovered pending state or a refunded attempt
 - failed levels can be restarted with a fresh attempt cycle while preserving prior attempt history and analytics
@@ -269,6 +274,8 @@ These requirements apply across all phases and should be treated as non-negotiab
 - the landing experience communicates the premise on first visit without a tutorial wall or multi-step modal sequence
 - level number and required threshold are visible during active play
 - the target image remains visible throughout prompt writing in MVP
+- the active level screen avoids clutter that distracts from studying the target image
+- smaller mobile viewports provide a way to inspect the target image at a larger size
 - result states use a clear comparison layout between target and generated images
 - player-facing scores are shown as percentages
 - failure states show the strongest attempt score and concise advice
@@ -305,6 +312,7 @@ These cases must be represented in the QA matrix, assigned during implementation
 
 - empty prompt submission: Agent 2 for client validation, Agent 3 for server validation
 - prompt exceeds character limit: Agent 2 for client validation, Agent 3 for server validation
+- provider content-policy rejection: Agent 4 returns structured rejection details, Agent 3 preserves attempts and surfaces recoverable error state
 - player refreshes during generation: Agent 3 and Agent 4 define recovery or refund behavior
 - generation succeeds but scoring fails: Agent 3 and Agent 4 handle retry-safe recovery
 - scoring succeeds but generated asset cannot be displayed: Agent 2 and Agent 3 surface recoverable UI state
@@ -383,6 +391,7 @@ Tasks for Agent 2:
 - build generating, result, retry, success, failure, replay, and summary states
 - define score presentation as a player-facing percentage display
 - implement a clear comparison layout for target and generated images in result states
+- add mobile target-image expansion or equivalent detailed inspection affordance
 - ensure failure UI can surface strongest attempt score and concise advice
 - implement restart-level CTA and flow from the failure state
 - implement responsive behavior for mobile, tablet, and desktop breakpoints
@@ -391,7 +400,7 @@ Tasks for Agent 2:
 
 Tasks for Agent 3:
 
-- implement persistence schema, including raw and normalized score storage, best score retention, and replay-safe progression fields
+- implement persistence schema, including prompt text, generated image references, generation metadata, raw and normalized score storage, best score retention, and replay-safe progression fields
 - implement session, attempt, progression, replay, and failed-level restart logic
 - implement submit-attempt and resume-progress endpoints
 - implement durable generated-asset reference persistence if resume/history requires it
@@ -407,6 +416,7 @@ Tasks for Agent 4:
 - integrate one scoring path
 - define normalized score outputs and reasoning fields
 - define provider failure behavior, timeout behavior, and interrupted-request signals
+- define content-policy rejection behavior and structured rejection payloads
 - create deterministic fixtures for scoring and integration tests
 - evaluate scoring consistency on visually acceptable matches
 - document expected scoring behavior for low-quality or off-topic provider outputs that are technically successful
@@ -555,6 +565,7 @@ Exit criteria:
 
 - generation request and result format
 - raw score payload, normalization fields, and storage requirements
+- generation metadata fields and content-policy rejection signals
 - provider failure signals and retry-safe behavior
 - timeout and interrupted-request recovery signals
 - score breakdown signals required for tip selection
