@@ -105,6 +105,16 @@ The third execution task is now decided and documented.
 
 Detailed rationale and access-pattern notes live in `docs/foundation/asset-storage-decision.md`.
 
+## Phase 0 Retention Policy
+
+The fourth execution task is now decided and documented.
+
+- Target images: retained until content is explicitly replaced or removed
+- Generated attempt images: retained for 90 days, then hard-deleted
+- Database attempt metadata: retained longer than the generated image object
+
+Detailed lifecycle rules live in `docs/foundation/asset-retention-policy.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:
