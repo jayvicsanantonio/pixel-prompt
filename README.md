@@ -85,6 +85,16 @@ The first execution task is now decided and documented.
 
 Detailed rationale and guardrails live in `docs/foundation/stack-decisions.md`.
 
+## Phase 0 AI Provider Decisions
+
+The second execution task is now decided and documented.
+
+- Baseline provider: OpenAI
+- Generation model: `gpt-image-1.5`
+- Scoring model: `gpt-5.4 mini`
+
+Detailed rationale, source links, and fallback notes live in `docs/foundation/ai-provider-decisions.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:
