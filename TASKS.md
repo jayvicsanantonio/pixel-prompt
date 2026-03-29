@@ -36,6 +36,9 @@ Owns:
 - provider interfaces for generation and scoring
 - content and analytics contract definitions
 - asset storage strategy for target and generated images
+- generated-image retention policy
+- MVP persistence and identity strategy
+- deployment and staging strategy
 - analytics provider and SDK setup
 - environment variable contract
 - error model and loading-state conventions
@@ -50,6 +53,9 @@ Must deliver:
 - API boundaries for submit-attempt, resume-progress, and analytics ingestion
 - baseline AI provider and model selection for generation and scoring
 - asset storage decision for durable target and generated image references
+- generated image retention policy for resume, replay, and history
+- MVP persistence model decision: anonymous server-persisted progress keyed by a lightweight session identifier, with no account system in MVP
+- deployment and staging plan for preview and production environments
 - analytics provider configuration plan
 - MVP slice plan
 - dependency map and integration sequence
@@ -85,6 +91,10 @@ Must deliver:
 - UX copy slots that can consume content and tip rules
 - frontend validation states
 - loading, error, and empty-state handling
+- active level UI that keeps the target image visible during prompt writing and shows level number, attempts remaining, and required score threshold
+- result UI that presents the target image and generated image side by side or in an equally clear comparison layout
+- player-facing score display as a percentage
+- final summary that shows levels completed, total attempts used, best scores, and improvement trend
 - replay entry points for completed levels
 - failure state that can surface strongest attempt score and concise advice
 - preservation of typed prompt on validation errors
@@ -113,6 +123,7 @@ Owns:
 - attempt lifecycle rules
 - threshold pass/fail logic
 - retry and progression rules
+- tip-selection orchestration
 - replay-safe progression invariants
 - analytics event emission
 - rate limiting and server-side validation
@@ -122,6 +133,7 @@ Must deliver:
 - persistent level progress and attempt history
 - best-score retention per level for UX and analytics
 - server APIs or actions for gameplay state transitions
+- runtime tip-selection engine that consumes attempt context, score signals, and Agent 5 tip rules
 - normalized event schema for product metrics
 - safe failure and retry behavior for technical errors
 - attempt-consumption rules that do not decrement on invalid submissions or technical failures
@@ -185,12 +197,13 @@ Owns:
 
 Must deliver:
 
-- initial curated level set with thresholds
+- initial curated level set with Level 1 at 50, Level 2 at 60, and Level 3 at 70
 - content schema population including category, difficulty, and theme metadata
 - rule-based retry tips for missing visual specificity across medium, subject, context, style, materials, textures, shapes, composition, and time period or artistic era
 - analytics event definitions explicitly mapped to PRD funnel, learning, and operational metrics
 - QA coverage plan for gameplay, replay, resume, and failure states
 - evaluation notes for threshold fairness and content difficulty
+- draft UX copy for landing, input, generating, result, success, failure, replay, and summary states
 
 ## Ownership Boundaries
 
@@ -212,6 +225,18 @@ Shared rules:
 - provider credentials remain server-only and are never exposed to the client.
 - generated assets required for resume or history must have durable references.
 
+## MVP Fixed Defaults
+
+Unless explicitly changed later, the MVP uses these fixed values and behaviors:
+
+- prompt character limit: 120 characters
+- maximum scored attempts per level: 3
+- seeded thresholds: Level 1 = 50, Level 2 = 60, Level 3 = 70
+- target image stays visible throughout prompt writing
+- player-facing scores are displayed as percentages
+- progress persistence is anonymous and server-persisted via a lightweight session identifier; account support is out of scope for MVP
+- generated attempt images use durable storage rather than ephemeral provider URLs, with retention policy documented in Phase 0
+
 ## Cross-Cutting Acceptance Criteria
 
 These requirements apply across all phases and should be treated as non-negotiable acceptance checks:
@@ -229,7 +254,12 @@ These requirements apply across all phases and should be treated as non-negotiab
 - empty prompts and over-limit prompts are blocked in both client and server validation
 - typed prompt text is preserved when validation fails
 - keyboard-first submission and retry flow exists for the core gameplay loop
+- level number and required threshold are visible during active play
+- the target image remains visible throughout prompt writing in MVP
+- result states use a clear comparison layout between target and generated images
+- player-facing scores are shown as percentages
 - failure states show the strongest attempt score and concise advice
+- final summary shows levels completed, total attempts used, best scores, and improvement trend
 
 ### Content and Tip Quality
 
@@ -300,12 +330,16 @@ Tasks:
 - choose the framework, package manager, database, analytics provider, and testing stack
 - choose baseline AI providers and models for generation and scoring
 - choose the asset storage strategy for target images and generated outputs
+- document the generated-image retention policy and storage lifecycle
+- document the MVP persistence model and anonymous identity/session strategy
 - scaffold the app and repository structure
-- define shared TypeScript types for level, attempt, score, result, and progress
+- define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
 - define content file format for levels, tip rules, and metadata fields such as category, difficulty, and theme
+- encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
 - define provider interfaces for generation and scoring
 - define event schema for analytics and map it to the PRD metrics
 - configure analytics SDK and infrastructure boundaries
+- define deployment, staging, and preview environment assumptions
 - write local setup instructions into `README.md`
 
 Exit criteria:
@@ -314,6 +348,7 @@ Exit criteria:
 - shared contracts compile
 - all agents can build against the same interfaces
 - provider, storage, and analytics decisions are documented
+- MVP constants and persistence defaults are documented in one place
 
 ### Phase 1: Parallel MVP Slice Development
 
@@ -327,10 +362,13 @@ Primary owners:
 Tasks for Agent 2:
 
 - build landing page and start/resume states
-- build active level screen and prompt input
+- build active level screen and prompt input with visible level number, required threshold, remaining attempts, and target image
 - preserve typed prompt on validation errors and support keyboard-first input flow in the core loop
 - build generating, result, retry, success, failure, replay, and summary states
+- define score presentation as a player-facing percentage display
+- implement a clear comparison layout for target and generated images in result states
 - ensure failure UI can surface strongest attempt score and concise advice
+- implement responsive behavior for mobile, tablet, and desktop breakpoints
 - wire the UI to mocked server contracts first
 - add frontend tests for validation, retry, replay, and failure-state behavior
 
@@ -341,6 +379,7 @@ Tasks for Agent 3:
 - implement submit-attempt and resume-progress endpoints
 - implement durable generated-asset reference persistence if resume/history requires it
 - enforce attempt fairness so invalid submissions and technical failures do not decrement attempts
+- implement tip-selection orchestration using Agent 4 score signals and Agent 5 tip rules
 - implement double-submit protection and request idempotency
 - implement analytics emission points
 - add business-rule tests for attempt consumption, replay, and resume behavior
@@ -361,6 +400,7 @@ Tasks for Agent 5:
 - define analytics event dictionary mapped to the PRD metrics and acceptance checks
 - author QA matrix that enumerates all PRD edge cases and assigns ownership
 - define copy guidelines for short, concrete, beginner-friendly UX text
+- draft UX copy for all MVP states and CTA labels
 
 Exit criteria:
 
@@ -386,6 +426,7 @@ Tasks:
 - connect frontend submission flow to real backend endpoint
 - connect backend attempt processing to generation and scoring adapters
 - display real score, pass/fail state, retry tips, and strongest-attempt context on failure
+- wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
 - decrement attempts only after valid scored submissions
 - persist best score, attempt history, and unlocked level progression
 - recover safely from refresh or disconnect during generation
@@ -408,7 +449,7 @@ Primary owners:
 
 Tasks:
 
-- implement final completion summary
+- implement final completion summary with levels completed, attempts used, best scores, and improvement trend
 - implement multi-level progression with unlocks and replay of completed levels
 - surface replay entry points without regressing unlocked progression
 - validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
@@ -442,12 +483,14 @@ Tasks:
 - verify accessibility, keyboard navigation, color contrast, and non-color state signaling
 - run copy audit for short, concrete, beginner-friendly language
 - improve loading and failure states
+- verify responsive behavior across mobile, tablet, and desktop breakpoints
 - add deterministic test fixtures for gameplay logic
 - validate end-to-end attempt latency and perceived responsiveness during model requests
 - verify progress-corruption protection across refresh and network interruption
 - review score fairness on hard levels
 - verify event integrity against product metrics
 - verify provider credentials and secrets remain server-only
+- configure staging and production deployment paths, environment variables, and preview workflow
 - clean up developer docs and deployment assumptions
 
 Exit criteria:
@@ -462,6 +505,7 @@ Exit criteria:
 
 - route structure
 - shared types for all UI states
+- shared MVP constants for prompt limit, attempt count, and score presentation
 - mocked API response shapes
 - design tokens or styling conventions
 
@@ -471,6 +515,7 @@ Exit criteria:
 - error contract
 - analytics payload schema
 - asset storage strategy and replay invariants
+- session and identity assumptions for anonymous server-persisted progress
 
 ### Agent 1 -> Agent 4
 
@@ -491,6 +536,7 @@ Exit criteria:
 - score payload and normalization fields
 - provider failure signals and retry-safe behavior
 - timeout and interrupted-request recovery signals
+- score breakdown signals required for tip selection
 
 ### Agent 3 -> Agent 2
 
@@ -511,6 +557,7 @@ Exit criteria:
 - tip categories and copy constraints
 - summary metrics and coaching copy constraints
 - UX copy review guidance for beginner-friendly messaging
+- drafted UX copy for MVP states
 
 ### Agent 5 -> Agent 3
 
@@ -518,6 +565,7 @@ Exit criteria:
 - QA assertions for progression and resume behavior
 - content IDs, thresholds, and tip rule references
 - explicit edge-case checklist for backend recovery behavior
+- tip rule definitions consumed by the runtime tip-selection engine
 
 ## Parallel Work Rules
 
@@ -525,6 +573,7 @@ Exit criteria:
 - Agent 3 should own business rules in tests before wiring live providers.
 - Agent 4 should create deterministic fixtures early so the rest of the system is testable without full live-model dependency.
 - Agent 5 should define the initial content pack and event taxonomy before the first integration pass.
+- the tip-selection engine should be integrated before content tuning is considered complete.
 - edge-case recovery rules should be implemented before broad polish work begins.
 - Agent 1 should only take back implementation work when a contract conflict or architecture change blocks multiple agents.
 
@@ -544,11 +593,14 @@ The PRD is considered implemented at MVP level when:
 - the user can play through a curated sequence of levels
 - completed levels can be replayed without reducing unlocked progression
 - each valid submission generates an image, receives a normalized score, and returns pass/fail
+- the active level UI shows the target image, required threshold, attempts remaining, and level number
+- result screens compare the target image against the generated image in a clear side-by-side or equivalent layout
 - failed attempts return actionable retry tips
 - failure after all attempts shows the strongest attempt score and concise advice
 - attempts, best scores, and unlocked progress persist correctly
 - invalid submissions and technical failures do not consume attempts
 - the final completion summary is shown at the end of the level set
+- the final completion summary includes levels completed, attempts used, best scores, and improvement trend
 - key analytics events are emitted across the full loop and map cleanly to the PRD metrics
 - major technical failures are handled without corrupting progress
 
@@ -558,6 +610,8 @@ The first concrete tasks for the repo should be:
 
 - choose and scaffold the app stack, analytics provider, and baseline AI providers
 - choose the asset storage strategy for target and generated images
+- document the MVP constants: 120-character prompt limit, 3-attempt cap, and seeded thresholds of 50, 60, and 70
+- document the MVP defaults for visible target image, percentage score display, anonymous server-persisted progress, and generated-image retention
 - create the shared domain types and level content schema
 - define the analytics event taxonomy, PRD metric mapping, and QA acceptance matrix
 - create the first 3 seeded levels with target-image placeholders
