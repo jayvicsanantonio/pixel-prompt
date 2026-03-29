@@ -1,3 +1,4 @@
+import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT } from "@/lib/game";
 import styles from "./page.module.css";
 
 const pillars = [
@@ -54,6 +55,7 @@ export default function Home() {
             <li>PostgreSQL plus Drizzle ORM</li>
             <li>PostHog for analytics</li>
             <li>Vitest, React Testing Library, and Playwright</li>
+            <li>{PROMPT_CHARACTER_LIMIT}-character prompt limit and {MAX_ATTEMPTS_PER_LEVEL} scored attempts per level</li>
           </ul>
         </article>
 
