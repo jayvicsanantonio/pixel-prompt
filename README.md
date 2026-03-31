@@ -73,6 +73,58 @@ Suggested stack direction:
   - similarity scoring provider abstraction
 - Analytics: event-based product analytics pipeline
 
+## Phase 0 Stack Decisions
+
+The first execution task is now decided and documented.
+
+- Framework: Next.js App Router with React and TypeScript
+- Package manager: pnpm
+- Database: PostgreSQL with Drizzle ORM and `drizzle-kit` migrations
+- Analytics provider: PostHog
+- Testing stack: Vitest, React Testing Library, and Playwright
+
+Detailed rationale and guardrails live in `docs/foundation/stack-decisions.md`.
+
+## Phase 0 AI Provider Decisions
+
+The second execution task is now decided and documented.
+
+- Baseline provider: OpenAI
+- Generation model: `gpt-image-1.5`
+- Scoring model: `gpt-5.4 mini`
+
+Detailed rationale, source links, and fallback notes live in `docs/foundation/ai-provider-decisions.md`.
+
+## Phase 0 Asset Storage Decision
+
+The third execution task is now decided and documented.
+
+- Storage provider: Amazon S3
+- Target assets: versioned bucket for curated level images
+- Generated outputs: private bucket for player attempt images served through signed access
+
+Detailed rationale and access-pattern notes live in `docs/foundation/asset-storage-decision.md`.
+
+## Phase 0 Retention Policy
+
+The fourth execution task is now decided and documented.
+
+- Target images: retained until content is explicitly replaced or removed
+- Generated attempt images: retained for 90 days, then hard-deleted
+- Database attempt metadata: retained longer than the generated image object
+
+Detailed lifecycle rules live in `docs/foundation/asset-retention-policy.md`.
+
+## Phase 0 Persistence Decision
+
+The fifth execution task is now decided and documented.
+
+- Progress is server-persisted in PostgreSQL
+- Identity is anonymous and browser-scoped in MVP
+- Resume is driven by an opaque HTTP-only session cookie
+
+Detailed persistence and session rules live in `docs/foundation/persistence-model.md`.
+
 ## Suggested High-Level Architecture
 
 The product can be organized into a few clear domains:
@@ -164,33 +216,44 @@ Not required for MVP:
 
 ## Local Setup
 
-This repository is currently at the planning stage. Replace this section once the initial application scaffold exists.
-
-Suggested placeholders to fill in later:
-
 ### Prerequisites
 
-- Runtime version
-- Package manager
-- Database requirements
-- Environment variables
+- Node.js 22.x was used to verify the current scaffold
+- `pnpm` 10.33.0
+- PostgreSQL for later backend tasks
+- AWS credentials and S3 buckets for later asset-storage tasks
+- OpenAI credentials for later generation and scoring tasks
+
+The current scaffold boots without external service credentials. Analytics is a no-op when PostHog variables are unset.
 
 ### Install
 
 ```bash
-# add installation steps once the app scaffold exists
+pnpm install
+cp .env.example .env.local
 ```
 
 ### Run the App
 
 ```bash
-# add local dev startup commands
+pnpm dev
 ```
+
+Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 ### Run Tests
 
 ```bash
-# add unit, integration, and end-to-end test commands
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Optional browser coverage:
+
+```bash
+pnpm test:e2e
 ```
 
 ## Development Workflow Suggestions

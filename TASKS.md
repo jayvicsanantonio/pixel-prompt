@@ -350,21 +350,21 @@ Support:
 
 Tasks:
 
-- choose the framework, package manager, database, analytics provider, and testing stack
-- choose baseline AI providers and models for generation and scoring
-- choose the asset storage strategy for target images and generated outputs
-- document the generated-image retention policy and storage lifecycle
-- document the MVP persistence model and anonymous identity/session strategy
-- scaffold the app and repository structure
-- define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
-- define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
-- encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
-- define provider interfaces for generation and scoring
-- define MVP score transparency rules so only the aggregate percentage is player-facing
-- define event schema for analytics and map it to the PRD metrics
-- configure analytics SDK and infrastructure boundaries
-- define deployment, staging, and preview environment assumptions
-- write local setup instructions into `README.md`
+1. [x] choose the framework, package manager, database, analytics provider, and testing stack (`Next.js App Router`, `pnpm`, `PostgreSQL + Drizzle`, `PostHog`, `Vitest + React Testing Library + Playwright`)
+2. [x] choose baseline AI providers and models for generation and scoring (`OpenAI`, `gpt-image-1.5` for generation, `gpt-5.4 mini` for scoring)
+3. [x] choose the asset storage strategy for target images and generated outputs (`Amazon S3`, separate target-asset and generated-output buckets)
+4. [x] document the generated-image retention policy and storage lifecycle (90-day generated-image retention; target assets retained until replaced)
+5. [x] document the MVP persistence model and anonymous identity/session strategy (PostgreSQL source of truth; anonymous `pp_session` cookie with rolling 90-day expiry)
+6. [x] scaffold the app and repository structure (Next.js app shell, test configs, server/content/test folders, reproducible `pnpm` lockfile)
+7. [x] define shared TypeScript types for level, attempt, score, result, progress, and shared MVP constants such as prompt limit 120 and max attempts 3
+8. [x] define content file format for levels, tip rules, and metadata fields such as category, difficulty, theme, and future pack/group identifiers
+9. [x] encode the seeded level thresholds for the first 3 levels as 50, 60, and 70
+10. [x] define provider interfaces for generation and scoring
+11. [x] define MVP score transparency rules so only the aggregate percentage is player-facing
+12. [x] define event schema for analytics and map it to the PRD metrics
+13. [x] configure analytics SDK and infrastructure boundaries
+14. [x] define deployment, staging, and preview environment assumptions
+15. [x] write local setup instructions into `README.md`
 
 Exit criteria:
 
