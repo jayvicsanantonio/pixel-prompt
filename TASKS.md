@@ -385,10 +385,14 @@ Primary owners:
 
 Tasks for Agent 2:
 
-- build landing page and start/resume states
-- build active level screen and prompt input with visible level number, required threshold, remaining attempts, and target image
-- preserve typed prompt on validation errors and support keyboard-first input flow in the core loop
-- build generating, result, retry, success, failure, replay, and summary states
+- [x] build landing page and start/resume states
+- [x] build active level screen and prompt input with visible level number, required threshold, remaining attempts, and target image
+- [x] preserve typed prompt on validation errors and support keyboard-first input flow in the core loop
+- [x] build generating state with submitted-prompt echo and waiting copy
+- build result state with target/generated comparison and player-facing percentage display
+- build retry and success continuation states
+- build failure state with strongest-attempt context and restart-level CTA
+- build replay entry states and final summary
 - define score presentation as a player-facing percentage display
 - implement a clear comparison layout for target and generated images in result states
 - add mobile target-image expansion or equivalent detailed inspection affordance
