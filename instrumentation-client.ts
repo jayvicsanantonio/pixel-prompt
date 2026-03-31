@@ -1,8 +1,8 @@
 import posthog from "posthog-js";
 
-import { getAnalyticsClientConfig } from "@/lib/analytics";
+import { getAnalyticsConfig } from "@/lib/analytics";
 
-const config = getAnalyticsClientConfig();
+const config = getAnalyticsConfig();
 
 if (config) {
   posthog.init(config.token, {

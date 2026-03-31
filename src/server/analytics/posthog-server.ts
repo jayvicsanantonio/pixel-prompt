@@ -1,11 +1,11 @@
 import { PostHog } from "posthog-node";
 
-import { getAnalyticsServerConfig } from "@/lib/analytics/config";
+import { getAnalyticsConfig } from "@/lib/analytics/config";
 import type { AnalyticsEvent } from "@/lib/analytics/events";
 import { toAnalyticsCaptureInput } from "@/lib/analytics/events";
 
 export function createServerAnalyticsClient() {
-  const config = getAnalyticsServerConfig();
+  const config = getAnalyticsConfig();
 
   if (!config) {
     return null;

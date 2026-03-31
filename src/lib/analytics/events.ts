@@ -3,6 +3,19 @@ import { z } from "zod";
 import type { AttemptId, AnonymousPlayerId, GameRunId, IsoDateTime, LevelId } from "@/lib/game";
 import type { ProviderFailureKind } from "@/server/providers";
 
+const ANALYTICS_SESSION_DISTINCT_ID_KEY = "pp_analytics_distinct_id";
+
+const providerFailureKindSchema = z
+  .enum([
+    "content_policy_rejection",
+    "rate_limited",
+    "timeout",
+    "interrupted",
+    "technical_failure",
+    "asset_unavailable",
+  ])
+  .optional();
+
 const analyticsBaseSchema = z.object({
   occurredAt: z.string().min(1),
   anonymousPlayerId: z.string().min(1).optional(),
@@ -66,16 +79,7 @@ const generationCompletedEventSchema = analyticsBaseSchema.extend({
   model: z.string().min(1),
   durationMs: z.number().int().nonnegative(),
   success: z.boolean(),
-  failureKind: z
-    .enum([
-      "content_policy_rejection",
-      "rate_limited",
-      "timeout",
-      "interrupted",
-      "technical_failure",
-      "asset_unavailable",
-    ])
-    .optional(),
+  failureKind: providerFailureKindSchema,
 });
 
 const scoringCompletedEventSchema = analyticsBaseSchema.extend({
@@ -87,16 +91,7 @@ const scoringCompletedEventSchema = analyticsBaseSchema.extend({
   model: z.string().min(1),
   durationMs: z.number().int().nonnegative(),
   success: z.boolean(),
-  failureKind: z
-    .enum([
-      "content_policy_rejection",
-      "rate_limited",
-      "timeout",
-      "interrupted",
-      "technical_failure",
-      "asset_unavailable",
-    ])
-    .optional(),
+  failureKind: providerFailureKindSchema,
 });
 
 const attemptResolvedEventSchema = analyticsBaseSchema.extend({
@@ -180,6 +175,29 @@ export function defineAnalyticsEvent<T extends AnalyticsEvent>(event: T) {
   return analyticsEventSchema.parse(event) as T;
 }
 
+function createFallbackDistinctId(prefix: string) {
+  const uuid = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+
+  return `${prefix}:${uuid}`;
+}
+
+function getBrowserSessionDistinctId() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const existing = window.sessionStorage.getItem(ANALYTICS_SESSION_DISTINCT_ID_KEY);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = createFallbackDistinctId("session");
+  window.sessionStorage.setItem(ANALYTICS_SESSION_DISTINCT_ID_KEY, created);
+
+  return created;
+}
+
 export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
   if (event.anonymousPlayerId) {
     return event.anonymousPlayerId;
@@ -189,7 +207,7 @@ export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
     return `run:${event.runId}`;
   }
 
-  return "anonymous";
+  return getBrowserSessionDistinctId() ?? createFallbackDistinctId(`event:${event.occurredAt}`);
 }
 
 export function toAnalyticsCaptureInput(event: AnalyticsEvent) {

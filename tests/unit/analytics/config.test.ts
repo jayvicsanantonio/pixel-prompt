@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { getAnalyticsClientConfig, getAnalyticsServerConfig, toAnalyticsCaptureInput } from "@/lib/analytics";
+import { getAnalyticsConfig, resolveAnalyticsDistinctId, toAnalyticsCaptureInput } from "@/lib/analytics";
 
 describe("analytics configuration", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
   it("returns null when analytics env is unset", () => {
-    expect(getAnalyticsClientConfig()).toBeNull();
-    expect(getAnalyticsServerConfig()).toBeNull();
+    expect(getAnalyticsConfig()).toBeNull();
   });
 
   it("builds a capture payload from the typed event shape", () => {
@@ -23,5 +26,18 @@ describe("analytics configuration", () => {
         anonymousPlayerId: "anon_123",
       },
     });
+  });
+
+  it("creates a stable browser-session distinct id when no identity is available", () => {
+    const event = {
+      name: "landing_viewed" as const,
+      occurredAt: "2026-03-29T08:00:00.000Z",
+    };
+
+    const first = resolveAnalyticsDistinctId(event);
+    const second = resolveAnalyticsDistinctId(event);
+
+    expect(first).toMatch(/^session:/);
+    expect(second).toBe(first);
   });
 });

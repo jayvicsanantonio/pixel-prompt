@@ -8,5 +8,8 @@ import { toAnalyticsCaptureInput } from "./events";
 export function captureClientAnalyticsEvent(event: AnalyticsEvent) {
   const payload = toAnalyticsCaptureInput(event);
 
-  posthog.capture(payload.event, payload.properties);
+  posthog.capture(payload.event, {
+    distinct_id: payload.distinctId,
+    ...payload.properties,
+  });
 }
