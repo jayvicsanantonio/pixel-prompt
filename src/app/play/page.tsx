@@ -8,9 +8,10 @@ function getSingleQueryValue(value: string | string[] | undefined) {
 export default async function PlayPage(props: PageProps<"/play">) {
   const searchParams = await props.searchParams;
   const levelParam = getSingleQueryValue(searchParams.level);
-  const levelNumber = levelParam ? Number.parseInt(levelParam, 10) : undefined;
+  const parsedLevelNumber = levelParam ? Number.parseInt(levelParam, 10) : undefined;
+  const levelNumber = parsedLevelNumber !== undefined && !Number.isNaN(parsedLevelNumber) ? parsedLevelNumber : undefined;
   const state = getMockActiveLevelState({
-    levelNumber: Number.isNaN(levelNumber ?? Number.NaN) ? undefined : levelNumber,
+    levelNumber,
     resume: getSingleQueryValue(searchParams.resume) === "1",
   });
 
