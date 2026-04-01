@@ -9,7 +9,7 @@ describe("LandingScreen", () => {
     render(<LandingScreen landingState={getMockLandingState()} levels={levels} />);
 
     expect(screen.getByRole("heading", { name: /study the image\. write the prompt\./i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Start Game" })).toHaveAttribute("href", "/play");
+    expect(screen.getByRole("link", { name: "Start Game" })).toHaveAttribute("href", "/play?level=1");
     expect(screen.getByText("Resume appears here after your first scored attempt.")).toBeInTheDocument();
     expect(screen.getByText("Pass at 50% match")).toBeInTheDocument();
     expect(screen.getByText("Pass at 60% match")).toBeInTheDocument();
@@ -22,10 +22,11 @@ describe("LandingScreen", () => {
     const resumeLink = screen.getByRole("link", { name: "Resume Level 2" });
     const resumeCard = resumeLink.closest("article");
 
-    expect(resumeLink).toHaveAttribute("href", "/play");
+    expect(resumeLink).toHaveAttribute("href", "/play?level=2&resume=1");
     expect(resumeCard).not.toBeNull();
     expect(within(resumeCard as HTMLElement).getByText(/continue at/i)).toBeInTheDocument();
     expect(resumeCard).toHaveTextContent("2 attempts left.");
+    expect(resumeCard).toHaveTextContent("1 level");
     expect(resumeCard).toHaveTextContent("54%");
   });
 });

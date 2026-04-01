@@ -7,7 +7,8 @@ interface MockLandingStateOptions {
 
 export function getMockLandingState(options?: MockLandingStateOptions): LandingExperienceState {
   const canResume = options?.canResume ?? false;
-  const startHref = "/play";
+  const firstLevel = levels[0];
+  const startHref = firstLevel ? `/play?level=${firstLevel.number}` : "/play";
 
   if (!canResume) {
     return {
@@ -25,13 +26,17 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
     };
   }
 
-  const currentLevel = levels[1];
+  const currentLevel = levels[1] ?? firstLevel;
+
+  if (!currentLevel) {
+    throw new Error("No levels available to build landing state.");
+  }
 
   return {
     startHref,
     resume: {
       available: true,
-      href: startHref,
+      href: `/play?level=${currentLevel.number}&resume=1`,
       currentLevelNumber: currentLevel.number,
       currentLevelTitle: currentLevel.title,
       levelsCleared: 1,

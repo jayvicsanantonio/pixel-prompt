@@ -17,6 +17,8 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
   const characterCount = promptText.length;
   const characterLimit = state.level.promptCharacterLimit;
   const isOverLimit = characterCount > characterLimit;
+  const promptFeedbackId = validationMessage ? "prompt-feedback" : undefined;
+  const promptDescribedBy = ["prompt-guidance", "prompt-counter", promptFeedbackId].filter(Boolean).join(" ");
 
   function submitPrompt() {
     const trimmedPrompt = promptText.trim();
@@ -123,13 +125,19 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
                 </label>
                 <textarea
                   id="prompt"
-                  aria-describedby="prompt-guidance prompt-counter prompt-feedback"
+                  aria-describedby={promptDescribedBy}
                   aria-invalid={validationMessage !== null}
                   className={styles.textarea}
                   name="prompt"
                   placeholder="sunlit pears and green bottle on a wooden table, warm studio still life"
                   value={promptText}
-                  onChange={(event) => setPromptText(event.target.value)}
+                  onChange={(event) => {
+                    setPromptText(event.target.value);
+
+                    if (validationMessage !== null) {
+                      setValidationMessage(null);
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                       event.preventDefault();

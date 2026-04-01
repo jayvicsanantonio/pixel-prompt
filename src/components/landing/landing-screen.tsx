@@ -73,7 +73,8 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
                       <strong>{landingState.resume.attemptsRemaining}</strong> attempts left.
                     </p>
                     <p>
-                      Cleared <strong>{landingState.resume.levelsCleared}</strong> level and banked a best score of{" "}
+                      Cleared <strong>{landingState.resume.levelsCleared}</strong>{" "}
+                      {landingState.resume.levelsCleared === 1 ? "level" : "levels"} and banked a best score of{" "}
                       <strong>{landingState.resume.bestScore}%</strong> on the current run.
                     </p>
                   </>

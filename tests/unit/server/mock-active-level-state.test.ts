@@ -15,4 +15,17 @@ describe("getMockActiveLevelState", () => {
       promptDraft: "",
     });
   });
+
+  it("returns the resumed level state when resume options are provided", () => {
+    expect(getMockActiveLevelState({ levelNumber: 2, resume: true })).toMatchObject({
+      level: {
+        id: "level-2",
+        number: 2,
+        title: "Midnight Alley Portrait",
+      },
+      attemptsUsed: 1,
+      attemptsRemaining: 2,
+      promptDraft: "cinematic neon portrait in a wet alley at midnight",
+    });
+  });
 });

@@ -4,10 +4,10 @@ import { getMockLandingState } from "@/server/game/mock-landing-state";
 describe("getMockLandingState", () => {
   it("returns the empty resume state by default", () => {
     expect(getMockLandingState()).toEqual({
-      startHref: "/play",
+      startHref: "/play?level=1",
       resume: {
         available: false,
-        href: "/play",
+        href: "/play?level=1",
         currentLevelNumber: null,
         currentLevelTitle: null,
         levelsCleared: 0,
@@ -20,10 +20,10 @@ describe("getMockLandingState", () => {
 
   it("returns a mocked saved run when resume is available", () => {
     expect(getMockLandingState({ canResume: true })).toEqual({
-      startHref: "/play",
+      startHref: "/play?level=1",
       resume: {
         available: true,
-        href: "/play",
+        href: "/play?level=2&resume=1",
         currentLevelNumber: 2,
         currentLevelTitle: "Midnight Alley Portrait",
         levelsCleared: 1,

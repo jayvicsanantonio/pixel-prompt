@@ -40,6 +40,21 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("121/120 characters")).toBeInTheDocument();
   });
 
+  it("clears validation state once the draft changes again", () => {
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    const prompt = screen.getByLabelText("Prompt");
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Write a prompt before you submit.");
+    expect(prompt).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(prompt, { target: { value: "sunlit pears and a bottle on wood" } });
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(prompt).toHaveAttribute("aria-invalid", "false");
+  });
+
   it("supports keyboard-first submission from the textarea", () => {
     render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
 
@@ -52,5 +67,21 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Building your match image")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(promptValue);
     expect(screen.getByRole("button", { name: "Back to Prompt" })).toBeInTheDocument();
+  });
+
+  it("syncs the draft and resets local UI state when the parent provides a different level", () => {
+    const initialState = getMockActiveLevelState();
+    const resumedState = getMockActiveLevelState({ levelNumber: 2, resume: true });
+    const { rerender } = render(<ActiveLevelScreen key={initialState.level.id} state={initialState} />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "temporary draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    expect(screen.getByText("Building your match image")).toBeInTheDocument();
+
+    rerender(<ActiveLevelScreen key={`${resumedState.level.id}:${resumedState.promptDraft}`} state={resumedState} />);
+
+    expect(screen.getByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("cinematic neon portrait in a wet alley at midnight");
+    expect(screen.queryByText("Building your match image")).not.toBeInTheDocument();
   });
 });
