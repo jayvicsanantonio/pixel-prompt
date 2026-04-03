@@ -9,15 +9,11 @@ export default async function PlayPage(props: PageProps<"/play">) {
   const searchParams = await props.searchParams;
   const levelParam = getSingleQueryValue(searchParams.level);
   const parsedLevelNumber = levelParam ? Number.parseInt(levelParam, 10) : undefined;
-  const attemptsUsedParam = getSingleQueryValue(searchParams.attemptsUsed);
-  const parsedAttemptsUsed = attemptsUsedParam ? Number.parseInt(attemptsUsedParam, 10) : undefined;
   const levelNumber = parsedLevelNumber !== undefined && !Number.isNaN(parsedLevelNumber) ? parsedLevelNumber : undefined;
-  const attemptsUsed = parsedAttemptsUsed !== undefined && !Number.isNaN(parsedAttemptsUsed) ? parsedAttemptsUsed : undefined;
   const state = getMockActiveLevelState({
     levelNumber,
     resume: getSingleQueryValue(searchParams.resume) === "1",
-    attemptsUsed,
   });
 
-  return <ActiveLevelScreen key={`${state.level.id}:${state.promptDraft}:${state.attemptsUsed}`} state={state} />;
+  return <ActiveLevelScreen key={`${state.level.id}:${state.promptDraft}`} state={state} />;
 }
