@@ -99,6 +99,41 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
     nextLevelHref: nextLevel ? `/play?level=${nextLevel.number}` : null,
     nextLevelNumber: nextLevel?.number ?? null,
     nextLevelTitle: nextLevel?.title ?? null,
+    restartLevelHref: `/play?level=${level.number}`,
+  };
+  const summaryPreview = {
+    levelsCompleted: levels.length,
+    totalAttemptsUsed: 4,
+    bestScores: [
+      {
+        levelId: "level-1",
+        levelNumber: 1,
+        levelTitle: "Sunlit Still Life",
+        bestScore: 68,
+        attemptsUsed: 1,
+        replayHref: "/play?level=1",
+      },
+      {
+        levelId: "level-2",
+        levelNumber: 2,
+        levelTitle: "Midnight Alley Portrait",
+        bestScore: 63,
+        attemptsUsed: 2,
+        replayHref: "/play?level=2",
+      },
+      {
+        levelId: "level-3",
+        levelNumber: 3,
+        levelTitle: "Ornate Courtyard",
+        bestScore: 78,
+        attemptsUsed: 1,
+        replayHref: "/play?level=3",
+      },
+    ],
+    improvementDelta: 10,
+    improvementSummary:
+      "You finished 10 points stronger than the opening clear and needed fewer revisions by the final courtyard.",
+    encouragement: "Replay a cleared level now, or come back when the next content pack lands.",
   };
 
   if (options?.resume) {
@@ -110,6 +145,7 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
       resultPreview,
       continuation,
       failurePreview,
+      summaryPreview,
     };
   }
 
@@ -121,5 +157,6 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
     resultPreview,
     continuation,
     failurePreview,
+    summaryPreview,
   };
 }

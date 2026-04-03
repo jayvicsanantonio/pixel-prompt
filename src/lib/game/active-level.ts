@@ -11,11 +11,30 @@ export interface ActiveLevelContinuationPreview {
   nextLevelHref: string | null;
   nextLevelNumber: number | null;
   nextLevelTitle: string | null;
+  restartLevelHref: string;
 }
 
 export interface ActiveLevelFailurePreview {
   strongestAttemptScore: number;
   summary: string;
+}
+
+export interface ActiveLevelSummaryLevelPreview {
+  levelId: Level["id"];
+  levelNumber: number;
+  levelTitle: string;
+  bestScore: number;
+  attemptsUsed: number;
+  replayHref: string;
+}
+
+export interface ActiveLevelSummaryPreview {
+  levelsCompleted: number;
+  totalAttemptsUsed: number;
+  bestScores: ActiveLevelSummaryLevelPreview[];
+  improvementDelta: number;
+  improvementSummary: string;
+  encouragement: string;
 }
 
 export interface ActiveLevelScreenState {
@@ -26,4 +45,5 @@ export interface ActiveLevelScreenState {
   resultPreview: ActiveLevelResultPreview;
   continuation: ActiveLevelContinuationPreview;
   failurePreview: ActiveLevelFailurePreview;
+  summaryPreview: ActiveLevelSummaryPreview;
 }

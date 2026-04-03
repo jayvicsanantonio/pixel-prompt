@@ -115,6 +115,11 @@
   line-height: 1.65;
 }
 
+.inspectControls {
+  display: grid;
+  gap: 0.6rem;
+}
+
 .studyFrame {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -124,6 +129,11 @@
   background:
     radial-gradient(circle at 24% 22%, rgba(255, 240, 185, 0.9), transparent 18%),
     linear-gradient(180deg, #f0d9bb 0%, #c48e53 48%, #8a5530 100%);
+}
+
+.studyFrameExpanded {
+  aspect-ratio: 1 / 1;
+  max-height: min(72vh, 38rem);
 }
 
 .wall,
@@ -325,6 +335,36 @@
   cursor: pointer;
 }
 
+.inspectButton {
+  display: none;
+}
+
+.inspectOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(45, 27, 17, 0.62);
+  backdrop-filter: blur(6px);
+}
+
+.inspectSheet {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  display: grid;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid rgba(255, 244, 232, 0.2);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 244, 0.98), rgba(255, 243, 231, 0.94)),
+    var(--panel);
+  box-shadow: 0 24px 72px rgba(24, 15, 10, 0.28);
+}
+
 .actionRow {
   display: flex;
   flex-wrap: wrap;
@@ -431,6 +471,31 @@
   background: rgba(255, 255, 255, 0.48);
 }
 
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.summaryCard {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border-radius: 22px;
+  border: 1px solid rgba(94, 69, 47, 0.1);
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.summaryTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.summaryMeta {
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 .resultPanelHeader {
   display: flex;
   flex-wrap: wrap;
@@ -534,6 +599,10 @@
 
   .targetPanel {
     position: static;
+  }
+
+  .inspectButton {
+    display: inline-flex;
   }
 }
 
