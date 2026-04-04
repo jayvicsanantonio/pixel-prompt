@@ -91,6 +91,11 @@
   gap: 1rem;
 }
 
+.summaryPanel {
+  width: min(960px, 100%);
+  margin: 0 auto;
+}
+
 .targetPanel {
   position: sticky;
   top: 1rem;

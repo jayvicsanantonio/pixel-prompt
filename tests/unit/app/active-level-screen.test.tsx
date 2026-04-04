@@ -29,16 +29,36 @@ describe("ActiveLevelScreen", () => {
   it("opens a larger target study view for closer inspection", () => {
     render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Expand Target Image" }));
+    const expandButton = screen.getByRole("button", { name: "Expand Target Image" });
+    expandButton.focus();
+    fireEvent.click(expandButton);
 
-    expect(screen.getByRole("dialog", { name: "Sunlit Still Life" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Sunlit Still Life" });
+    const closeButton = screen.getByRole("button", { name: "Close Study View" });
+
+    expect(dialog).toBeInTheDocument();
+    expect(closeButton).toHaveFocus();
     expect(
       screen.getByRole("img", {
         name: "Expanded view of A sunlit still life arranged on a wooden table.",
       }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Close Study View" }));
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Sunlit Still Life" })).not.toBeInTheDocument();
+    expect(expandButton).toHaveFocus();
+  });
+
+  it("closes the study dialog when the backdrop is clicked", () => {
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Target Image" }));
+
+    fireEvent.click(screen.getByRole("dialog", { name: "Sunlit Still Life" }));
 
     expect(screen.queryByRole("dialog", { name: "Sunlit Still Life" })).not.toBeInTheDocument();
   });
@@ -179,6 +199,9 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Levels Cleared")).toBeInTheDocument();
     expect(screen.getByText("Total Attempts")).toBeInTheDocument();
     expect(screen.getByText("Improvement Trend")).toBeInTheDocument();
+    expect(screen.queryByText("Target Image")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required Score")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "An ornate courtyard with layered arches and warm stone textures." })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Replay Level 1" })).toHaveAttribute("href", "/play?level=1");
     expect(screen.getByRole("link", { name: "Replay Level 2" })).toHaveAttribute("href", "/play?level=2");
     expect(screen.getByRole("link", { name: "Replay Level 3" })).toHaveAttribute("href", "/play?level=3");

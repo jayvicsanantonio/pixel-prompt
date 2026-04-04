@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { levels } from "@/content";
 import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
 
 describe("getMockActiveLevelState", () => {
@@ -25,6 +26,7 @@ describe("getMockActiveLevelState", () => {
         nextLevelHref: "/play?level=2",
         nextLevelNumber: 2,
         nextLevelTitle: "Midnight Alley Portrait",
+        restartLevelHref: "/play?level=1",
       },
       failurePreview: {
         strongestAttemptScore: 68,
@@ -54,6 +56,7 @@ describe("getMockActiveLevelState", () => {
         nextLevelHref: "/play?level=3",
         nextLevelNumber: 3,
         nextLevelTitle: "Ornate Courtyard",
+        restartLevelHref: "/play?level=2",
       },
       failurePreview: {
         strongestAttemptScore: 59,
@@ -72,5 +75,21 @@ describe("getMockActiveLevelState", () => {
         strongestAttemptScore: 59,
       },
     });
+  });
+
+  it("derives summary replay entries from the current level catalog", () => {
+    const state = getMockActiveLevelState({ levelNumber: 3 });
+
+    expect(state.summaryPreview.levelsCompleted).toBe(levels.length);
+    expect(state.summaryPreview.bestScores).toHaveLength(levels.length);
+    expect(state.summaryPreview.bestScores.map((levelSummary) => levelSummary.levelId)).toEqual(
+      levels.map((level) => level.id),
+    );
+    expect(state.summaryPreview.bestScores.map((levelSummary) => levelSummary.replayHref)).toEqual(
+      levels.map((level) => `/play?level=${level.number}`),
+    );
+    expect(state.summaryPreview.totalAttemptsUsed).toBe(
+      state.summaryPreview.bestScores.reduce((total, levelSummary) => total + levelSummary.attemptsUsed, 0),
+    );
   });
 });

@@ -665,6 +665,6 @@ The first concrete tasks for the repo should be:
 - `PRD.md`: defined
 - `README.md`: defined
 - `TASKS.md`: defined
-- app scaffold: not started
+- app scaffold: completed
 - provider integrations: not started
-- gameplay implementation: not started
+- gameplay implementation: in progress
