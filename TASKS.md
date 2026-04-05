@@ -404,9 +404,9 @@ Tasks for Agent 2:
 
 Tasks for Agent 3:
 
-- implement persistence schema, including prompt text, generated image references, generation metadata, raw and normalized score storage, best score retention, and replay-safe progression fields
-- implement session, attempt, progression, replay, and failed-level restart logic
-- implement submit-attempt and resume-progress endpoints
+- [x] implement persistence schema, including prompt text, generated image references, generation metadata, raw and normalized score storage, best score retention, and replay-safe progression fields
+- [x] implement session, attempt, progression, replay, and failed-level restart logic
+- [x] implement submit-attempt and resume-progress endpoints
 - implement durable generated-asset reference persistence if resume/history requires it
 - enforce attempt fairness so invalid submissions and technical failures do not decrement attempts
 - implement tip-selection orchestration using Agent 4 score signals and Agent 5 tip rules
