@@ -392,15 +392,15 @@ Tasks for Agent 2:
 - [x] build result state with target/generated comparison and player-facing percentage display
 - [x] build retry and success continuation states
 - [x] build failure state with strongest-attempt context and restart-level CTA
-- build replay entry states and final summary
+- [x] build replay entry states and final summary
 - [x] define score presentation as a player-facing percentage display
 - [x] implement a clear comparison layout for target and generated images in result states
-- add mobile target-image expansion or equivalent detailed inspection affordance
-- ensure failure UI can surface strongest attempt score and concise advice
-- implement restart-level CTA and flow from the failure state
-- implement responsive behavior for mobile, tablet, and desktop breakpoints
-- wire the UI to mocked server contracts first
-- add frontend tests for validation, retry, replay, and failure-state behavior
+- [x] add mobile target-image expansion or equivalent detailed inspection affordance
+- [x] ensure failure UI can surface strongest attempt score and concise advice
+- [x] implement restart-level CTA and flow from the failure state
+- [x] implement responsive behavior for mobile, tablet, and desktop breakpoints
+- [x] wire the UI to mocked server contracts first
+- [x] add frontend tests for validation, retry, replay, and failure-state behavior
 
 Tasks for Agent 3:
 
@@ -665,6 +665,6 @@ The first concrete tasks for the repo should be:
 - `PRD.md`: defined
 - `README.md`: defined
 - `TASKS.md`: defined
-- app scaffold: not started
+- app scaffold: completed
 - provider integrations: not started
-- gameplay implementation: not started
+- gameplay implementation: in progress

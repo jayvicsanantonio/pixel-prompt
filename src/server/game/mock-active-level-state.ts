@@ -82,6 +82,61 @@ const mockFailurePreviewByLevel = {
   },
 } as const;
 
+const mockSummaryMetricsByLevelNumber = {
+  1: {
+    bestScore: 68,
+    attemptsUsed: 1,
+  },
+  2: {
+    bestScore: 63,
+    attemptsUsed: 2,
+  },
+  3: {
+    bestScore: 78,
+    attemptsUsed: 1,
+  },
+} as const;
+
+function getMockSummaryPreview() {
+  const bestScores = levels.map((currentLevel, index) => {
+    const metrics = mockSummaryMetricsByLevelNumber[
+      currentLevel.number as keyof typeof mockSummaryMetricsByLevelNumber
+    ] ?? {
+      bestScore: Math.min(100, currentLevel.threshold + 8 + index * 4),
+      attemptsUsed: 1,
+    };
+
+    return {
+      levelId: currentLevel.id,
+      levelNumber: currentLevel.number,
+      levelTitle: currentLevel.title,
+      bestScore: metrics.bestScore,
+      attemptsUsed: metrics.attemptsUsed,
+      replayHref: `/play?level=${currentLevel.number}`,
+    };
+  });
+  const totalAttemptsUsed = bestScores.reduce((total, levelSummary) => total + levelSummary.attemptsUsed, 0);
+  const firstCompletedLevel = bestScores[0];
+  const lastCompletedLevel = bestScores[bestScores.length - 1];
+  const improvementDelta =
+    firstCompletedLevel && lastCompletedLevel ? lastCompletedLevel.bestScore - firstCompletedLevel.bestScore : 0;
+  const improvementSummary =
+    bestScores.length > 1 && firstCompletedLevel && lastCompletedLevel
+      ? `You finished ${Math.abs(improvementDelta)} points ${
+          improvementDelta >= 0 ? "stronger" : "lower"
+        } on ${lastCompletedLevel.levelTitle} than on ${firstCompletedLevel.levelTitle}.`
+      : "You cleared the opening run. Replay the level to sharpen the score even further.";
+
+  return {
+    levelsCompleted: bestScores.length,
+    totalAttemptsUsed,
+    bestScores,
+    improvementDelta,
+    improvementSummary,
+    encouragement: "Replay a cleared level now, or come back when the next content pack lands.",
+  };
+}
+
 export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): ActiveLevelScreenState {
   const level = levels.find((candidate) => candidate.number === options?.levelNumber) ?? levels[0];
 
@@ -99,7 +154,9 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
     nextLevelHref: nextLevel ? `/play?level=${nextLevel.number}` : null,
     nextLevelNumber: nextLevel?.number ?? null,
     nextLevelTitle: nextLevel?.title ?? null,
+    restartLevelHref: `/play?level=${level.number}`,
   };
+  const summaryPreview = getMockSummaryPreview();
 
   if (options?.resume) {
     return {
@@ -110,6 +167,7 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
       resultPreview,
       continuation,
       failurePreview,
+      summaryPreview,
     };
   }
 
@@ -121,5 +179,6 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
     resultPreview,
     continuation,
     failurePreview,
+    summaryPreview,
   };
 }

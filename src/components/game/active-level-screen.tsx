@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toPlayerFacingScore, type ActiveLevelScreenState } from "@/lib/game";
 import styles from "./active-level-screen.module.css";
 
@@ -9,11 +9,26 @@ interface ActiveLevelScreenProps {
   state: ActiveLevelScreenState;
 }
 
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'textarea:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
 export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
   const [promptText, setPromptText] = useState(state.promptDraft);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
-  const [screenMode, setScreenMode] = useState<"active" | "generating" | "result" | "success" | "retry" | "failure">("active");
+  const [screenMode, setScreenMode] = useState<
+    "active" | "generating" | "result" | "success" | "retry" | "failure" | "summary"
+  >("active");
+  const [isTargetExpanded, setIsTargetExpanded] = useState(false);
   const [submittedPrompt, setSubmittedPrompt] = useState("");
+  const inspectDialogRef = useRef<HTMLDivElement | null>(null);
+  const inspectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const characterCount = promptText.length;
   const characterLimit = state.level.promptCharacterLimit;
   const isOverLimit = characterCount > characterLimit;
@@ -21,6 +36,81 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
   const promptDescribedBy = ["prompt-guidance", "prompt-counter", promptFeedbackId].filter(Boolean).join(" ");
   const playerFacingScore = toPlayerFacingScore(state.resultPreview.score);
   const hasRetryRemaining = state.continuation.attemptsRemainingAfterResult > 0;
+
+  useEffect(() => {
+    if (!isTargetExpanded) {
+      return;
+    }
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const dialogElementCandidate = inspectDialogRef.current;
+    const triggerElement = inspectTriggerRef.current;
+
+    if (!dialogElementCandidate) {
+      return;
+    }
+
+    const dialogElement: HTMLDivElement = dialogElementCandidate;
+
+    const getFocusableElements = () =>
+      Array.from(dialogElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (element) => !element.hasAttribute("disabled"),
+      );
+
+    const focusableElements = getFocusableElements();
+    const initialFocusTarget = focusableElements[0] ?? dialogElement;
+    initialFocusTarget.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsTargetExpanded(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const currentFocusableElements = getFocusableElements();
+
+      if (currentFocusableElements.length === 0) {
+        event.preventDefault();
+        dialogElement.focus();
+        return;
+      }
+
+      const firstFocusableElement = currentFocusableElements[0];
+      const lastFocusableElement = currentFocusableElements[currentFocusableElements.length - 1];
+      const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+      if (event.shiftKey) {
+        if (!activeElement || activeElement === firstFocusableElement || !dialogElement.contains(activeElement)) {
+          event.preventDefault();
+          lastFocusableElement.focus();
+        }
+
+        return;
+      }
+
+      if (!activeElement || activeElement === lastFocusableElement || !dialogElement.contains(activeElement)) {
+        event.preventDefault();
+        firstFocusableElement.focus();
+      }
+    }
+
+    dialogElement.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      dialogElement.removeEventListener("keydown", handleKeyDown);
+
+      const focusRestoreTarget =
+        previousFocusRef.current && previousFocusRef.current.isConnected ? previousFocusRef.current : triggerElement;
+
+      focusRestoreTarget?.focus();
+    };
+  }, [isTargetExpanded]);
 
   function submitPrompt() {
     const trimmedPrompt = promptText.trim();
@@ -38,6 +128,114 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
     setValidationMessage(null);
     setSubmittedPrompt(trimmedPrompt);
     setScreenMode("generating");
+  }
+
+  function renderTargetStudyFrame(ariaLabel: string, expanded = false) {
+    return (
+      <div
+        className={`${styles.studyFrame} ${expanded ? styles.studyFrameExpanded : ""}`.trim()}
+        role="img"
+        aria-label={ariaLabel}
+      >
+        <div className={styles.wall} />
+        <div className={styles.table} />
+        <div className={styles.cloth} />
+        <div className={styles.bottle} />
+        <div className={styles.plate} />
+        <div className={styles.pearLeft} />
+        <div className={styles.pearRight} />
+      </div>
+    );
+  }
+
+  function renderSummaryPage() {
+    const summaryImprovementLabel = `${state.summaryPreview.improvementDelta > 0 ? "+" : ""}${state.summaryPreview.improvementDelta} pts`;
+    const finalReplayLevel = state.summaryPreview.bestScores[state.summaryPreview.bestScores.length - 1];
+
+    return (
+      <main className={styles.page}>
+        <section className={`${styles.promptPanel} ${styles.summaryPanel}`.trim()}>
+          <header className={styles.panelHeader}>
+            <p className={styles.eyebrow}>Run Complete</p>
+            <h1 className={styles.promptTitle}>You cleared the seeded pack</h1>
+            <p className={styles.promptBody}>
+              The final summary keeps the run easy to scan, then turns straight into replay entry points for every
+              cleared level.
+            </p>
+          </header>
+
+          <article className={`${styles.scoreHero} ${styles.scoreHeroPass}`} role="status">
+            <div>
+              <p className={styles.statLabel}>Pack Result</p>
+              <p className={styles.scoreValue}>
+                {state.summaryPreview.levelsCompleted}/{state.summaryPreview.bestScores.length}
+              </p>
+            </div>
+            <div className={styles.scoreMeta}>
+              <p className={styles.scoreHeadline}>All seeded levels cleared</p>
+              <p className={styles.scoreSummary}>{state.summaryPreview.improvementSummary}</p>
+            </div>
+          </article>
+
+          <div className={styles.statsGrid}>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>Levels Cleared</span>
+              <strong className={styles.statValue}>{state.summaryPreview.levelsCompleted}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>Total Attempts</span>
+              <strong className={styles.statValue}>{state.summaryPreview.totalAttemptsUsed}</strong>
+            </article>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>Improvement Trend</span>
+              <strong className={styles.statValue}>{summaryImprovementLabel}</strong>
+            </article>
+          </div>
+
+          <section className={styles.resultPanel}>
+            <div className={styles.resultPanelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Replay Entry Points</p>
+                <h2 className={styles.resultPanelTitle}>Best scores by cleared level</h2>
+              </div>
+              <p className={styles.helperText}>A finished run should still lead somewhere useful instead of dead-ending.</p>
+            </div>
+
+            <div className={styles.summaryGrid}>
+              {state.summaryPreview.bestScores.map((levelSummary) => (
+                <article key={levelSummary.levelId} className={styles.summaryCard}>
+                  <p className={styles.statLabel}>Level {levelSummary.levelNumber}</p>
+                  <h3 className={styles.summaryTitle}>{levelSummary.levelTitle}</h3>
+                  <p className={styles.summaryMeta}>
+                    Best score {levelSummary.bestScore}% in {levelSummary.attemptsUsed} scored{" "}
+                    {levelSummary.attemptsUsed === 1 ? "attempt" : "attempts"}.
+                  </p>
+                  <a className={styles.secondaryButton} href={levelSummary.replayHref}>
+                    Replay Level {levelSummary.levelNumber}
+                  </a>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <article className={`${styles.feedback} ${styles.success}`}>
+            <p className={styles.statLabel}>Next Return</p>
+            <p className={styles.submittedPrompt}>{state.summaryPreview.encouragement}</p>
+          </article>
+
+          <div className={styles.actionRow}>
+            {finalReplayLevel ? (
+              <a className={styles.button} href={finalReplayLevel.replayHref}>
+                Replay Final Level
+              </a>
+            ) : null}
+            <Link className={styles.secondaryButton} href="/">
+              Back to Landing
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   function renderPromptPanel() {
@@ -277,10 +475,13 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
         <>
           <header className={styles.panelHeader}>
             <p className={styles.eyebrow}>Level Cleared</p>
-            <h2 className={styles.promptTitle}>Carry the momentum into the next image</h2>
+            <h2 className={styles.promptTitle}>
+              {state.continuation.nextLevelTitle ? "Carry the momentum into the next image" : "Close out the run cleanly"}
+            </h2>
             <p className={styles.promptBody}>
-              Passing the threshold should roll straight into the next challenge. This mock continuation keeps the next
-              level and replay options visible without exposing internal scoring details.
+              {state.continuation.nextLevelTitle
+                ? "Passing the threshold should roll straight into the next challenge. This mock continuation keeps the next level and replay options visible without exposing internal scoring details."
+                : "The final cleared level should hand off to a compact summary instead of dropping the player into a dead end."}
             </p>
           </header>
 
@@ -330,7 +531,11 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
               <Link className={styles.button} href={state.continuation.nextLevelHref}>
                 Continue to Level {state.continuation.nextLevelNumber}
               </Link>
-            ) : null}
+            ) : (
+              <button className={styles.button} type="button" onClick={() => setScreenMode("summary")}>
+                View Final Summary
+              </button>
+            )}
             <button className={styles.secondaryButton} type="button" onClick={() => setScreenMode("active")}>
               Replay This Level
             </button>
@@ -414,8 +619,8 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
           <p className={styles.eyebrow}>Level Failed</p>
           <h2 className={styles.promptTitle}>You ran out of attempts, but the best try is still visible</h2>
           <p className={styles.promptBody}>
-            The failure state should surface the strongest attempt without sounding punitive. The actual restart flow is
-            a separate task, but the player-facing restart CTA belongs here.
+            The failure state should surface the strongest attempt without sounding punitive, then offer a clean
+            restart that resets the local mock state.
           </p>
         </header>
 
@@ -464,15 +669,19 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
         </section>
 
         <div className={styles.actionRow}>
-          <button className={styles.button} type="button">
+          <a className={styles.button} href={state.continuation.restartLevelHref}>
             Restart Level
-          </button>
+          </a>
           <button className={styles.secondaryButton} type="button" onClick={() => setScreenMode("result")}>
             Review Result Again
           </button>
         </div>
       </>
     );
+  }
+
+  if (screenMode === "summary") {
+    return renderSummaryPage();
   }
 
   return (
@@ -507,24 +716,65 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
             <p className={styles.targetDescription}>{state.level.description}</p>
           </header>
 
-          <div className={styles.studyFrame} role="img" aria-label={state.level.targetImage.alt}>
-            <div className={styles.wall} />
-            <div className={styles.table} />
-            <div className={styles.cloth} />
-            <div className={styles.bottle} />
-            <div className={styles.plate} />
-            <div className={styles.pearLeft} />
-            <div className={styles.pearRight} />
-          </div>
+          {renderTargetStudyFrame(state.level.targetImage.alt)}
 
           <p className={styles.targetCaption}>
             Keep the target visible while you write. The mock artwork here stands in for the curated level image until
             the real asset pipeline lands.
           </p>
+
+          <div className={styles.inspectControls}>
+            <button
+              ref={inspectTriggerRef}
+              className={`${styles.secondaryButton} ${styles.inspectButton}`.trim()}
+              type="button"
+              onClick={() => setIsTargetExpanded(true)}
+            >
+              Expand Target Image
+            </button>
+            <p className={styles.helperText}>Use the larger study view on smaller screens when the framing needs a closer read.</p>
+          </div>
         </section>
 
         <section className={styles.promptPanel}>{renderPromptPanel()}</section>
       </div>
+
+      {isTargetExpanded ? (
+        <div
+          ref={inspectDialogRef}
+          className={styles.inspectOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="expanded-target-title"
+          tabIndex={-1}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsTargetExpanded(false);
+            }
+          }}
+        >
+          <div className={styles.inspectSheet}>
+            <div className={styles.resultPanelHeader}>
+              <div>
+                <p className={styles.eyebrow}>Expanded Target</p>
+                <h2 className={styles.resultPanelTitle} id="expanded-target-title">
+                  {state.level.title}
+                </h2>
+              </div>
+              <button className={styles.secondaryButton} type="button" onClick={() => setIsTargetExpanded(false)}>
+                Close Study View
+              </button>
+            </div>
+
+            {renderTargetStudyFrame(`Expanded view of ${state.level.targetImage.alt}`, true)}
+
+            <p className={styles.targetCaption}>
+              Inspect the composition, object spacing, and lighting cue placement here, then return to the prompt with
+              the target still fresh in memory.
+            </p>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

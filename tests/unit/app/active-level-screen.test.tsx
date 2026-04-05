@@ -26,6 +26,43 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("28/120 characters")).toBeInTheDocument();
   });
 
+  it("opens a larger target study view for closer inspection", () => {
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    const expandButton = screen.getByRole("button", { name: "Expand Target Image" });
+    expandButton.focus();
+    fireEvent.click(expandButton);
+
+    const dialog = screen.getByRole("dialog", { name: "Sunlit Still Life" });
+    const closeButton = screen.getByRole("button", { name: "Close Study View" });
+
+    expect(dialog).toBeInTheDocument();
+    expect(closeButton).toHaveFocus();
+    expect(
+      screen.getByRole("img", {
+        name: "Expanded view of A sunlit still life arranged on a wooden table.",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(dialog, { key: "Tab" });
+    expect(closeButton).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Sunlit Still Life" })).not.toBeInTheDocument();
+    expect(expandButton).toHaveFocus();
+  });
+
+  it("closes the study dialog when the backdrop is clicked", () => {
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Target Image" }));
+
+    fireEvent.click(screen.getByRole("dialog", { name: "Sunlit Still Life" }));
+
+    expect(screen.queryByRole("dialog", { name: "Sunlit Still Life" })).not.toBeInTheDocument();
+  });
+
   it("preserves the typed draft when validation fails", () => {
     render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
 
@@ -108,6 +145,21 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByRole("button", { name: "Replay This Level" })).toBeInTheDocument();
   });
 
+  it("returns to the prompt state when replaying a cleared level", () => {
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "sunlit pears and a green bottle on a wooden table" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replay This Level" }));
+
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("sunlit pears and a green bottle on a wooden table");
+  });
+
   it("shows the retry continuation path after a below-threshold result and keeps the draft for revision", () => {
     const resumedState = getMockActiveLevelState({ levelNumber: 2, resume: true });
     render(<ActiveLevelScreen state={resumedState} />);
@@ -127,6 +179,36 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByLabelText("Prompt")).toHaveValue("cinematic neon portrait in a wet alley at midnight");
   });
 
+  it("shows the final summary with replay entry points after clearing the last seeded level", () => {
+    const finalLevelState = getMockActiveLevelState({ levelNumber: 3 });
+    render(<ActiveLevelScreen state={finalLevelState} />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "ornate stone courtyard with warm light and repeating arches" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
+
+    expect(screen.getByRole("button", { name: "View Final Summary" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View Final Summary" }));
+
+    expect(screen.getByText("You cleared the seeded pack")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("3/3");
+    expect(screen.getByText("Levels Cleared")).toBeInTheDocument();
+    expect(screen.getByText("Total Attempts")).toBeInTheDocument();
+    expect(screen.getByText("Improvement Trend")).toBeInTheDocument();
+    expect(screen.queryByText("Target Image")).not.toBeInTheDocument();
+    expect(screen.queryByText("Required Score")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "An ornate courtyard with layered arches and warm stone textures." })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Replay Level 1" })).toHaveAttribute("href", "/play?level=1");
+    expect(screen.getByRole("link", { name: "Replay Level 2" })).toHaveAttribute("href", "/play?level=2");
+    expect(screen.getByRole("link", { name: "Replay Level 3" })).toHaveAttribute("href", "/play?level=3");
+    expect(screen.getByRole("link", { name: "Replay Final Level" })).toHaveAttribute("href", "/play?level=3");
+    expect(screen.getByText("Replay a cleared level now, or come back when the next content pack lands.")).toBeInTheDocument();
+  });
+
   it("shows the failure state with strongest-attempt context after the last retry is spent", () => {
     const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
     render(<ActiveLevelScreen state={exhaustedState} />);
@@ -139,7 +221,12 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByRole("status")).toHaveTextContent("59%");
     expect(screen.getByText("Closest run fell just short")).toBeInTheDocument();
     expect(screen.getByText("What to carry into the restart")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Restart Level" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The best attempt got close on mood, but the alley context and framing stayed too loose to pass. Restarting should sharpen those scene cues earlier.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Restart Level" })).toHaveAttribute("href", "/play?level=2");
     expect(screen.getByRole("button", { name: "Review Result Again" })).toBeInTheDocument();
   });
 
