@@ -22,7 +22,9 @@ interface SubmitAttemptAnalyticsInput {
   attemptResult: RecordAttemptResult;
   level: Level;
   occurredAt: string;
+  generationDurationMs: number;
   promptLength: number;
+  scoringDurationMs: number;
   totalDurationMs: number;
 }
 
@@ -35,8 +37,20 @@ function mapProviderFailureKind(attempt: LevelAttempt): ProviderFailureKind | un
     return undefined;
   }
 
+  if (attempt.result.errorCode?.includes("rate_limit") || attempt.result.errorCode?.includes("429")) {
+    return "rate_limited";
+  }
+
   if (attempt.result.errorCode?.includes("timeout")) {
     return "timeout";
+  }
+
+  if (attempt.result.errorCode?.includes("interrupt")) {
+    return "interrupted";
+  }
+
+  if (attempt.result.errorCode?.includes("asset")) {
+    return "asset_unavailable";
   }
 
   return "technical_failure";
@@ -94,13 +108,11 @@ export function buildSubmitAttemptAnalyticsEvents(input: SubmitAttemptAnalyticsI
   const { attempt, session, transition } = attemptResult;
   const anonymousPlayerId = session.progress.playerId;
   const totalDurationMs = Math.max(0, input.totalDurationMs);
-  // Until generation and scoring are timed independently, keep generation latency
-  // as the full backend attempt duration and scoring latency at zero rather than
-  // emitting a made-up split.
-  const generationDurationMs = totalDurationMs;
-  const scoringDurationMs = 0;
+  const generationDurationMs = Math.max(0, input.generationDurationMs);
+  const scoringDurationMs = Math.max(0, input.scoringDurationMs);
   const generation = attempt.generation;
   const failureKind = mapProviderFailureKind(attempt);
+  const generationSucceeded = Boolean(generation?.assetKey);
   const events: AnalyticsEvent[] = [
     defineAnalyticsEvent({
       name: "prompt_submitted",
@@ -122,12 +134,12 @@ export function buildSubmitAttemptAnalyticsEvents(input: SubmitAttemptAnalyticsI
       provider: generation?.provider ?? "unknown",
       model: generation?.model ?? "unknown",
       durationMs: generationDurationMs,
-      success: attempt.result.status === "scored",
-      failureKind,
+      success: generationSucceeded,
+      failureKind: generationSucceeded ? undefined : failureKind,
     }),
   ];
 
-  if (attempt.result.status === "scored" && attempt.result.score) {
+  if (generationSucceeded) {
     events.push(
       defineAnalyticsEvent({
         name: "scoring_completed",
@@ -136,12 +148,16 @@ export function buildSubmitAttemptAnalyticsEvents(input: SubmitAttemptAnalyticsI
         runId: session.progress.runId,
         levelId: attempt.levelId,
         attemptId: attempt.id,
-        provider: attempt.result.score.scorer.provider,
-        model: attempt.result.score.scorer.model,
+        provider: attempt.result.score?.scorer.provider ?? "unknown",
+        model: attempt.result.score?.scorer.model ?? "unknown",
         durationMs: scoringDurationMs,
-        success: true,
+        success: attempt.result.status === "scored",
+        failureKind: attempt.result.status === "scored" ? undefined : failureKind,
       }),
     );
+  }
+
+  if (attempt.result.status === "scored" && attempt.result.score) {
     events.push(
       defineAnalyticsEvent({
         name: "attempt_resolved",

@@ -134,6 +134,7 @@ function buildAttemptResult(attempt: typeof levelAttempts.$inferSelect, stronges
     score,
     strongestAttemptScore,
     tipIds: attempt.tipIds ?? [],
+    scoringReasoning: attempt.scoringReasoning ?? undefined,
     errorCode: attempt.errorCode ?? undefined,
     errorMessage: attempt.errorMessage ?? undefined,
   };
@@ -251,7 +252,7 @@ function buildAttemptRows(
       scoringProvider: mappedScore.scoringProvider,
       scoringModel: mappedScore.scoringModel,
       scoringModelVersion: mappedScore.scoringModelVersion,
-      scoringReasoning: null,
+      scoringReasoning: attempt.result.scoringReasoning ?? null,
       scoredAt: attempt.result.status === "scored" ? toDate(attempt.createdAt) : null,
       tipIds: attempt.result.tipIds,
       providerFailureKind: mapFailureKind(attempt.result),

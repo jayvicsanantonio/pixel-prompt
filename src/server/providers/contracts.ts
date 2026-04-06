@@ -66,10 +66,12 @@ export type ImageScoringResult = ImageScoringSuccess | ProviderFailure;
 
 export interface ImageGenerationProvider {
   readonly providerId: string;
+  readonly modelRef: ProviderModelRef;
   generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult>;
 }
 
 export interface ImageScoringProvider {
   readonly providerId: string;
+  readonly modelRef: ProviderModelRef;
   scoreImageMatch(request: ImageScoringRequest): Promise<ImageScoringResult>;
 }

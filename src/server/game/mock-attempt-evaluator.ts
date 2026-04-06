@@ -1,4 +1,5 @@
 import type { AttemptGenerationDetails, AttemptResult, AttemptScore, Level } from "@/lib/game";
+import type { ProviderFailure } from "@/server/providers";
 
 interface EvaluatedAttempt {
   generation: AttemptGenerationDetails;
@@ -11,7 +12,7 @@ const levelKeywordMap: Record<string, string[]> = {
   "level-3": ["courtyard", "arches", "stone", "ornate", "historical", "warm", "architecture", "layered"],
 };
 
-function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore {
+export function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore {
   const normalizedPrompt = promptText.toLowerCase();
   const uniqueWords = new Set(normalizedPrompt.split(/[^a-z0-9]+/).filter(Boolean));
   const matchedKeywords = (levelKeywordMap[level.id] ?? []).filter((keyword) => uniqueWords.has(keyword));
@@ -37,6 +38,42 @@ function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore
     },
   };
 }
+
+export function buildScoredAttemptResult(level: Level, promptText: string): AttemptResult {
+  return buildAttemptResultFromScore(scorePromptAgainstLevel(level, promptText));
+}
+
+export function buildAttemptResultFromScore(score: AttemptScore, scoringReasoning?: string): AttemptResult {
+  return {
+    status: "scored",
+    outcome: score.passed ? "passed" : "failed",
+    score,
+    tipIds: [],
+    scoringReasoning,
+  };
+}
+
+export function mapProviderFailureToAttemptResult(failure: ProviderFailure): AttemptResult {
+  if (failure.kind === "content_policy_rejection") {
+    return {
+      status: "content_policy_rejected",
+      outcome: "rejected",
+      tipIds: [],
+      errorCode: failure.code,
+      errorMessage: failure.message,
+    };
+  }
+
+  return {
+    status: "technical_failure",
+    outcome: "error",
+    tipIds: [],
+    errorCode: failure.code,
+    errorMessage: failure.message,
+  };
+}
+
+export const mapGenerationFailureToAttemptResult = mapProviderFailureToAttemptResult;
 
 export function evaluateMockAttempt(level: Level, promptText: string, attemptId: string): EvaluatedAttempt {
   const normalizedPrompt = promptText.toLowerCase();
@@ -73,8 +110,6 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
     };
   }
 
-  const score = scorePromptAgainstLevel(level, promptText);
-
   return {
     generation: {
       provider: "mock",
@@ -83,11 +118,6 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
       seed: `${level.id}:${promptText.length}`,
       revisedPrompt: promptText,
     },
-    result: {
-      status: "scored",
-      outcome: score.passed ? "passed" : "failed",
-      score,
-      tipIds: [],
-    },
+    result: buildScoredAttemptResult(level, promptText),
   };
 }

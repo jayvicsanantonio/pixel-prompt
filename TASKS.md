@@ -412,13 +412,13 @@ Tasks for Agent 3:
 - [x] implement tip-selection orchestration using Agent 4 score signals and Agent 5 tip rules
 - [x] implement double-submit protection and request idempotency
 - [x] implement analytics emission points
-- add business-rule tests for attempt consumption, replay, and resume behavior
+- [x] add business-rule tests for attempt consumption, replay, and resume behavior
 
 Tasks for Agent 4:
 
-- integrate one generation path
-- integrate one scoring path
-- define normalized score outputs and reasoning fields
+- [x] integrate one generation path (OpenAI image generation adapter wired into submit-attempt flow with persisted generated outputs and mock fallback in test/dev paths without credentials)
+- [x] integrate one scoring path (OpenAI Responses-based image scorer added behind explicit opt-in, with mock scoring preserved as the stable default until target-image assets and calibration are production-ready)
+- [x] define normalized score outputs and reasoning fields (provider outputs now clamp to the shared 0-100 contract, derive raw score from normalized score, and persist internal scoring reasoning without exposing it in the player-facing UI)
 - define provider failure behavior, timeout behavior, and interrupted-request signals
 - define content-policy rejection behavior and structured rejection payloads
 - create deterministic fixtures for scoring and integration tests

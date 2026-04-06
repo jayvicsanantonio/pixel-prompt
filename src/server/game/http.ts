@@ -6,13 +6,14 @@ import { captureServerAnalyticsEvents } from "@/server/analytics";
 import { levels } from "@/content";
 import type { Level } from "@/lib/game";
 import { buildLandingExperience, recordAttempt, resolveResumeLevel, type RecordAttemptResult } from "@/server/game/session-state";
+import { getImageGenerationProvider, getImageScoringProvider } from "@/server/providers";
 
 import {
   buildPromptValidationFailedAnalyticsEvent,
   buildResumeProgressAnalyticsEvents,
   buildSubmitAttemptAnalyticsEvents,
 } from "./analytics";
-import { evaluateMockAttempt } from "./mock-attempt-evaluator";
+import { buildAttemptResultFromScore, mapProviderFailureToAttemptResult } from "./mock-attempt-evaluator";
 import { countPromptCharacters } from "./session-persistence";
 import { getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 import { createSubmissionDedupKey, withPendingSubmissionDedup } from "./submission-idempotency";
@@ -351,14 +352,72 @@ export async function handleSubmitAttempt(request: Request) {
           }
 
           const attemptId = randomUUID();
-          const evaluatedAttempt = evaluateMockAttempt(activeLevel, trimmedPrompt, attemptId);
+          const generationProvider = getImageGenerationProvider();
+          const scoringProvider = getImageScoringProvider();
+          const attemptsForCurrentCycle = activeSession.attempts.filter(
+            (attempt) =>
+              attempt.levelId === activeLevel.id &&
+              attempt.attemptCycle === (activeLevelProgress?.currentAttemptCycle ?? 1),
+          );
+          const generationStartedAt = Date.now();
+          const generationResult = await generationProvider.generateImage({
+            prompt: trimmedPrompt,
+            context: {
+              runId: activeSession.progress.runId,
+              levelId: activeLevel.id,
+              attemptId,
+              attemptNumber: attemptsForCurrentCycle.length + 1,
+            },
+          });
+          const generationDurationMs = Date.now() - generationStartedAt;
+          const scoringStartedAt = Date.now();
+          const scoringResult =
+            generationResult.ok
+              ? await scoringProvider.scoreImageMatch({
+                  prompt: trimmedPrompt,
+                  generatedImageAssetKey: generationResult.assetKey,
+                  targetImage: activeLevel.targetImage,
+                  threshold: activeLevel.threshold,
+                  context: {
+                    runId: activeSession.progress.runId,
+                    levelId: activeLevel.id,
+                    attemptId,
+                    attemptNumber: attemptsForCurrentCycle.length + 1,
+                  },
+                })
+              : null;
+          const scoringDurationMs = generationResult.ok ? Date.now() - scoringStartedAt : 0;
           const attemptResult = recordAttempt({
             session: activeSession,
             levelId: activeLevel.id,
             attemptId,
             promptText: trimmedPrompt,
-            result: evaluatedAttempt.result,
-            generation: evaluatedAttempt.generation,
+            result: !generationResult.ok
+              ? mapProviderFailureToAttemptResult(generationResult)
+              : scoringResult?.ok
+                ? buildAttemptResultFromScore(scoringResult.score, scoringResult.reasoning)
+                : mapProviderFailureToAttemptResult(
+                    scoringResult ?? {
+                      ok: false,
+                      kind: "technical_failure",
+                      code: "scoring_result_missing",
+                      message: "Scoring did not return a result.",
+                      retryable: true,
+                      consumeAttempt: false,
+                    },
+                  ),
+            generation: generationResult.ok
+              ? {
+                  provider: generationResult.provider.provider,
+                  model: generationResult.provider.model,
+                  assetKey: generationResult.assetKey,
+                  seed: generationResult.seed ?? undefined,
+                  revisedPrompt: generationResult.revisedPrompt ?? undefined,
+                }
+              : {
+              provider: generationProvider.modelRef.provider,
+              model: generationProvider.modelRef.model,
+            },
           });
 
           return {
@@ -366,6 +425,8 @@ export async function handleSubmitAttempt(request: Request) {
             value: {
               attemptResult,
               analyticsLevel: activeLevel,
+              generationDurationMs,
+              scoringDurationMs,
             },
           };
         });
@@ -408,7 +469,7 @@ export async function handleSubmitAttempt(request: Request) {
         throw error;
       }
 
-      const { attemptResult, analyticsLevel } = mutation.value;
+      const { attemptResult, analyticsLevel, generationDurationMs, scoringDurationMs } = mutation.value;
       const occurredAt = new Date().toISOString();
       const totalDurationMs = Date.now() - submissionStartedAt;
 
@@ -417,7 +478,9 @@ export async function handleSubmitAttempt(request: Request) {
           attemptResult,
           level: analyticsLevel,
           occurredAt,
+          generationDurationMs,
           promptLength: promptCharacterCount,
+          scoringDurationMs,
           totalDurationMs,
         }),
       );

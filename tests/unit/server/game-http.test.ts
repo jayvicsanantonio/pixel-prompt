@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+
+const onePixelPngBase64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9Wn2X2QAAAAASUVORK5CYII=";
 
 function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
@@ -24,8 +27,17 @@ async function createSessionToken() {
 }
 
 describe("game http handlers", () => {
+  const originalApiKey = process.env.OPENAI_API_KEY;
+  const originalEnableOpenAiInTests = process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
+
   beforeEach(() => {
     resetSessionStoreForTests();
+  });
+
+  afterEach(() => {
+    process.env.OPENAI_API_KEY = originalApiKey;
+    process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = originalEnableOpenAiInTests;
+    vi.unstubAllGlobals();
   });
 
   it("returns the empty resume payload without creating a session", async () => {
@@ -250,6 +262,55 @@ describe("game http handlers", () => {
         highestUnlockedLevelNumber: 2,
         totalAttemptsUsed: 1,
       },
+    });
+  });
+
+  it("routes submissions through the OpenAI generation provider when explicitly enabled in tests", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = "1";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          created: 1_775_529_600,
+          data: [
+            {
+              b64_json: onePixelPngBase64,
+              revised_prompt: "refined still life prompt",
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const sessionToken = await createSessionToken();
+
+    const response = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life of pears and a bottle on a wooden table",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.attempt.generation).toMatchObject({
+      provider: "openai",
+      model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5",
+      revisedPrompt: "refined still life prompt",
     });
   });
 
