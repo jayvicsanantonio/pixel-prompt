@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 
+import { after } from "next/server";
+import type { AnalyticsEvent } from "@/lib/analytics";
+import { captureServerAnalyticsEvents } from "@/server/analytics";
 import { levels } from "@/content";
-import { buildLandingExperience, recordAttempt, resolveResumeLevel } from "@/server/game/session-state";
+import type { Level } from "@/lib/game";
+import { buildLandingExperience, recordAttempt, resolveResumeLevel, type RecordAttemptResult } from "@/server/game/session-state";
 
+import {
+  buildPromptValidationFailedAnalyticsEvent,
+  buildResumeProgressAnalyticsEvents,
+  buildSubmitAttemptAnalyticsEvents,
+} from "./analytics";
 import { evaluateMockAttempt } from "./mock-attempt-evaluator";
 import { countPromptCharacters } from "./session-persistence";
 import { getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
+import { createSubmissionDedupKey, withPendingSubmissionDedup } from "./submission-idempotency";
 
 function getCookieValue(request: Request, cookieName: string) {
   const cookieHeader = request.headers.get("cookie");
@@ -37,11 +47,95 @@ function getCookieValue(request: Request, cookieName: string) {
   return null;
 }
 
+async function captureAnalytics(events: Array<AnalyticsEvent | null>) {
+  const filteredEvents = events.filter((event): event is AnalyticsEvent => event != null);
+
+  if (filteredEvents.length === 0) {
+    return;
+  }
+
+  try {
+    await captureServerAnalyticsEvents(filteredEvents);
+  } catch {
+    // Analytics failures must never block gameplay responses.
+  }
+}
+
+function scheduleAnalyticsCapture(events: Array<AnalyticsEvent | null>) {
+  const filteredEvents = events.filter((event): event is AnalyticsEvent => event != null);
+
+  if (filteredEvents.length === 0) {
+    return;
+  }
+
+  const task = () => captureAnalytics(filteredEvents);
+
+  try {
+    after(task);
+  } catch {
+    setTimeout(() => {
+      void task();
+    }, 0);
+  }
+}
+
+type SubmitAttemptOutcome =
+  | {
+      status: 200;
+      token: string | undefined;
+      attemptResult: RecordAttemptResult;
+      analyticsLevel: Level;
+    }
+  | {
+      status: 409;
+      body: {
+        ok: false;
+        code: "run_complete" | "level_changed" | "restart_required";
+        message: string;
+      };
+    };
+
+function buildSubmitAttemptResponse(sessionToken: string | undefined, attemptResult: RecordAttemptResult) {
+  const response = Response.json({
+    ok: true,
+    transition: attemptResult.transition,
+    attempt: attemptResult.attempt,
+    currentLevel: resolveResumeLevel(attemptResult.session.progress, levels),
+    landing: buildLandingExperience(attemptResult.session, levels),
+    progress: attemptResult.session.progress,
+  });
+
+  if (sessionToken) {
+    response.headers.append(
+      "set-cookie",
+      `${getSessionCookieAttributes().name}=${sessionToken}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
+        getSessionCookieAttributes().secure ? "; Secure" : ""
+      }`,
+    );
+  }
+
+  return response;
+}
+
+function buildSubmitAttemptOutcomeResponse(outcome: SubmitAttemptOutcome) {
+  if (outcome.status !== 200) {
+    return Response.json(outcome.body, {
+      status: outcome.status,
+    });
+  }
+
+  return buildSubmitAttemptResponse(outcome.token, outcome.attemptResult);
+}
+
 export async function handleResumeProgress(request: Request) {
   const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
   const session = sessionToken ? await getSessionByToken(sessionToken) : null;
+  const occurredAt = new Date().toISOString();
+  const currentLevel = session ? resolveResumeLevel(session.progress, levels) : (levels[0] ?? null);
 
   if (!session) {
+    scheduleAnalyticsCapture(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session: null }));
+
     return Response.json({
       ok: true,
       landing: buildLandingExperience(null, levels),
@@ -50,10 +144,12 @@ export async function handleResumeProgress(request: Request) {
     });
   }
 
+  scheduleAnalyticsCapture(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session }));
+
   const response = Response.json({
     ok: true,
     landing: buildLandingExperience(session, levels),
-    currentLevel: resolveResumeLevel(session.progress, levels),
+    currentLevel,
     progress: session.progress,
   });
 
@@ -127,10 +223,22 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
+  const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
+  const existingSession = sessionToken ? await getSessionByToken(sessionToken) : null;
   const trimmedPrompt = promptText.trim();
   const promptCharacterCount = countPromptCharacters(trimmedPrompt);
 
   if (promptCharacterCount === 0) {
+    scheduleAnalyticsCapture([
+      buildPromptValidationFailedAnalyticsEvent({
+        occurredAt: new Date().toISOString(),
+        level: requestedLevel,
+        promptLength: promptCharacterCount,
+        reason: "empty",
+        session: existingSession,
+      }),
+    ]);
+
     return Response.json(
       {
         ok: false,
@@ -144,6 +252,16 @@ export async function handleSubmitAttempt(request: Request) {
   }
 
   if (promptCharacterCount > requestedLevel.promptCharacterLimit) {
+    scheduleAnalyticsCapture([
+      buildPromptValidationFailedAnalyticsEvent({
+        occurredAt: new Date().toISOString(),
+        level: requestedLevel,
+        promptLength: promptCharacterCount,
+        reason: "over_limit",
+        session: existingSession,
+      }),
+    ]);
+
     return Response.json(
       {
         ok: false,
@@ -156,8 +274,6 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
-  const existingSession = sessionToken ? await getSessionByToken(sessionToken) : null;
   const currentLevel = existingSession ? resolveResumeLevel(existingSession.progress, levels) : (levels[0] ?? null);
 
   if (!currentLevel || (existingSession && existingSession.progress.currentLevelId == null)) {
@@ -203,104 +319,117 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  let mutation;
-  try {
-    mutation = await mutateSession(sessionToken, async (activeSession) => {
-      const activeLevel = resolveResumeLevel(activeSession.progress, levels);
+  const submission = await withPendingSubmissionDedup(
+    createSubmissionDedupKey({
+      sessionToken,
+      request,
+      levelId,
+      promptText: trimmedPrompt,
+    }),
+    async (): Promise<SubmitAttemptOutcome> => {
+      let mutation;
+      const submissionStartedAt = Date.now();
 
-      if (!activeLevel || activeSession.progress.currentLevelId == null) {
-        throw new Error("No active level is available for submission.");
+      try {
+        mutation = await mutateSession(sessionToken, async (activeSession) => {
+          const activeLevel = resolveResumeLevel(activeSession.progress, levels);
+
+          if (!activeLevel || activeSession.progress.currentLevelId == null) {
+            throw new Error("No active level is available for submission.");
+          }
+
+          const activeLevelProgress = activeSession.progress.levels.find(
+            (levelProgress) => levelProgress.levelId === activeLevel.id,
+          );
+
+          if (activeLevel.id !== levelId) {
+            throw new Error("The current level changed while this submission was being processed.");
+          }
+
+          if (activeLevelProgress?.status === "failed") {
+            throw new Error("This level has no attempts left. Restart it before submitting again.");
+          }
+
+          const attemptId = randomUUID();
+          const evaluatedAttempt = evaluateMockAttempt(activeLevel, trimmedPrompt, attemptId);
+          const attemptResult = recordAttempt({
+            session: activeSession,
+            levelId: activeLevel.id,
+            attemptId,
+            promptText: trimmedPrompt,
+            result: evaluatedAttempt.result,
+            generation: evaluatedAttempt.generation,
+          });
+
+          return {
+            session: attemptResult.session,
+            value: {
+              attemptResult,
+              analyticsLevel: activeLevel,
+            },
+          };
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "No active level is available for submission.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "run_complete",
+                message: error.message,
+              },
+            };
+          }
+
+          if (error.message === "The current level changed while this submission was being processed.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "level_changed",
+                message: error.message,
+              },
+            };
+          }
+
+          if (error.message === "This level has no attempts left. Restart it before submitting again.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "restart_required",
+                message: error.message,
+              },
+            };
+          }
+        }
+
+        throw error;
       }
 
-      const activeLevelProgress = activeSession.progress.levels.find(
-        (levelProgress) => levelProgress.levelId === activeLevel.id,
+      const { attemptResult, analyticsLevel } = mutation.value;
+      const occurredAt = new Date().toISOString();
+      const totalDurationMs = Date.now() - submissionStartedAt;
+
+      scheduleAnalyticsCapture(
+        buildSubmitAttemptAnalyticsEvents({
+          attemptResult,
+          level: analyticsLevel,
+          occurredAt,
+          promptLength: promptCharacterCount,
+          totalDurationMs,
+        }),
       );
 
-      if (activeLevel.id !== levelId) {
-        throw new Error("The current level changed while this submission was being processed.");
-      }
-
-      if (activeLevelProgress?.status === "failed") {
-        throw new Error("This level has no attempts left. Restart it before submitting again.");
-      }
-
-      const attemptId = randomUUID();
-      const evaluatedAttempt = evaluateMockAttempt(activeLevel, trimmedPrompt, attemptId);
-      const attemptResult = recordAttempt({
-        session: activeSession,
-        levelId: activeLevel.id,
-        attemptId,
-        promptText: trimmedPrompt,
-        result: evaluatedAttempt.result,
-        generation: evaluatedAttempt.generation,
-      });
-
       return {
-        session: attemptResult.session,
-        value: attemptResult,
+        status: 200,
+        token: mutation.token,
+        attemptResult,
+        analyticsLevel,
       };
-    });
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "No active level is available for submission.") {
-        return Response.json(
-          {
-            ok: false,
-            code: "run_complete",
-            message: error.message,
-          },
-          {
-            status: 409,
-          },
-        );
-      }
-
-      if (error.message === "The current level changed while this submission was being processed.") {
-        return Response.json(
-          {
-            ok: false,
-            code: "level_changed",
-            message: error.message,
-          },
-          {
-            status: 409,
-          },
-        );
-      }
-
-      if (error.message === "This level has no attempts left. Restart it before submitting again.") {
-        return Response.json(
-          {
-            ok: false,
-            code: "restart_required",
-            message: error.message,
-          },
-          {
-            status: 409,
-          },
-        );
-      }
-    }
-
-    throw error;
-  }
-  const attemptResult = mutation.value;
-
-  const response = Response.json({
-    ok: true,
-    transition: attemptResult.transition,
-    attempt: attemptResult.attempt,
-    currentLevel: resolveResumeLevel(attemptResult.session.progress, levels),
-    landing: buildLandingExperience(attemptResult.session, levels),
-    progress: attemptResult.session.progress,
-  });
-
-  response.headers.append(
-    "set-cookie",
-    `${getSessionCookieAttributes().name}=${mutation.token}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
-      getSessionCookieAttributes().secure ? "; Secure" : ""
-    }`,
+    },
   );
 
-  return response;
+  return buildSubmitAttemptOutcomeResponse(submission);
 }

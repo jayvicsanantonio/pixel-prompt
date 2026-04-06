@@ -44,4 +44,19 @@ describe("analytics events", () => {
     expect(event.success).toBe(false);
     expect(event.failureKind).toBe("timeout");
   });
+
+  it("keeps resume-offered aligned with level analytics fields", () => {
+    const event = defineAnalyticsEvent({
+      name: "resume_offered",
+      occurredAt: "2026-03-29T08:00:00.000Z",
+      anonymousPlayerId: "anon_123",
+      runId: "run_123",
+      levelId: "level-2",
+      levelNumber: 2,
+      highestUnlockedLevelNumber: 3,
+    });
+
+    expect(event.levelId).toBe("level-2");
+    expect(event.levelNumber).toBe(2);
+  });
 });

@@ -12,6 +12,7 @@ import type {
   LevelId,
   LevelProgress,
 } from "@/lib/game";
+import { selectRetryTipIds } from "./tip-selection";
 
 export interface GameSessionSnapshot {
   progress: GameProgress;
@@ -279,6 +280,15 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
   const strongestAttemptScore = getStrongestAttemptScore(currentLevelProgress, attemptScore);
   const consumedAttempt = input.result.status === "scored";
   const attemptNumber = attemptsForCurrentCycle.length + 1;
+  const resolvedTipIds =
+    input.result.tipIds.length > 0
+      ? input.result.tipIds
+      : selectRetryTipIds({
+          attemptNumber,
+          level,
+          previousAttempts: attemptsForCurrentCycle,
+          score: input.result.score,
+        });
   const updatedAttempt: LevelAttempt = {
     id: input.attemptId,
     runId: input.session.progress.runId,
@@ -292,6 +302,7 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
     result: {
       ...input.result,
       strongestAttemptScore: strongestAttemptScore ?? null,
+      tipIds: resolvedTipIds,
     },
   };
 
