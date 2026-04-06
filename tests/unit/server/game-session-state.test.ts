@@ -207,6 +207,7 @@ describe("session-state", () => {
 
     expect(replay.progress.currentLevelId).toBe("level-1");
     expect(replay.progress.highestUnlockedLevelNumber).toBe(2);
+    expect(replay.progress.totalAttemptsUsed).toBe(1);
     expect(replay.progress.levels[0]).toMatchObject({
       status: "in_progress",
       currentAttemptCycle: 2,
@@ -244,6 +245,7 @@ describe("session-state", () => {
     expect(replayPass.transition).toBe("passed");
     expect(replayPass.session.progress.currentLevelId).toBe("level-2");
     expect(replayPass.session.progress.highestUnlockedLevelNumber).toBe(2);
+    expect(replayPass.session.progress.totalAttemptsUsed).toBe(2);
     expect(replayPass.session.progress.levels[0]).toMatchObject({
       status: "passed",
       bestScore: 81,
@@ -302,6 +304,7 @@ describe("session-state", () => {
     });
 
     expect(restarted.progress.currentLevelId).toBe("level-1");
+    expect(restarted.progress.totalAttemptsUsed).toBe(3);
     expect(restarted.progress.levels[0]).toMatchObject({
       status: "in_progress",
       currentAttemptCycle: 2,
@@ -310,5 +313,69 @@ describe("session-state", () => {
       bestScore: 33,
     });
     expect(restarted.attempts).toHaveLength(3);
+  });
+
+  it("rejects new scored attempts after a level is already failed", () => {
+    let session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: startedAt,
+    });
+
+    for (const attemptId of ["attempt-1", "attempt-2", "attempt-3"]) {
+      session = recordAttempt({
+        session,
+        levelId: "level-1",
+        attemptId,
+        promptText: "too generic still life prompt",
+        createdAt: "2026-04-04T00:05:00.000Z",
+        result: {
+          status: "scored",
+          outcome: "failed",
+          tipIds: ["tip-materials"],
+          score: {
+            raw: 0.33,
+            normalized: 33,
+            threshold: 50,
+            passed: false,
+            breakdown: {
+              materials: 22,
+            },
+            scorer: {
+              provider: "openai",
+              model: "gpt-5.4-mini",
+            },
+          },
+        },
+      }).session;
+    }
+
+    expect(() =>
+      recordAttempt({
+        session,
+        levelId: "level-1",
+        attemptId: "attempt-4",
+        promptText: "still generic",
+        createdAt: "2026-04-04T00:10:00.000Z",
+        result: {
+          status: "scored",
+          outcome: "failed",
+          tipIds: [],
+          score: {
+            raw: 0.3,
+            normalized: 30,
+            threshold: 50,
+            passed: false,
+            breakdown: {
+              subject: 30,
+            },
+            scorer: {
+              provider: "openai",
+              model: "gpt-5.4-mini",
+            },
+          },
+        },
+      }),
+    ).toThrow('Cannot record attempts for failed level "level-1" without restarting it first.');
   });
 });

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
@@ -22,6 +20,10 @@ function getDatabaseUrl() {
   }
 
   return connectionString;
+}
+
+export function hasDatabaseUrl() {
+  return Boolean(process.env.DATABASE_URL);
 }
 
 export function createDatabase(connectionString = getDatabaseUrl()) {

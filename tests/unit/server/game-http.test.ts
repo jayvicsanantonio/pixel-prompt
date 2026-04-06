@@ -94,6 +94,24 @@ describe("game http handlers", () => {
     });
   });
 
+  it("returns a 400 for malformed JSON payloads", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: "{",
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_json",
+    });
+  });
+
   it("records valid submissions and advances the run state", async () => {
     const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
     const sessionToken = getSessionCookieValue(resumeResponse);
@@ -167,6 +185,102 @@ describe("game http handlers", () => {
         currentLevelId: "level-1",
         totalAttemptsUsed: 0,
       },
+    });
+  });
+
+  it("requires a restart after the final failed attempt", async () => {
+    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
+    const sessionToken = getSessionCookieValue(resumeResponse);
+
+    for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
+      const response = await postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    }
+
+    const blockedResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(blockedResponse.status).toBe(409);
+    await expect(blockedResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "restart_required",
+    });
+  });
+
+  it("serializes concurrent submissions against the same session", async () => {
+    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
+    const sessionToken = getSessionCookieValue(resumeResponse);
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+    ]);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(2);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      attemptsUsed: 2,
+      attemptsRemaining: 1,
     });
   });
 });

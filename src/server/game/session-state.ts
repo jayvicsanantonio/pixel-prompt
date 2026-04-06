@@ -98,7 +98,6 @@ function resolveFallbackCurrentLevelId(progress: GameProgress, levels: Level[]) 
 }
 
 function finalizeProgress(progress: GameProgress, levels: Level[], preferredCurrentLevelId?: LevelId | null): GameProgress {
-  const totalAttemptsUsed = progress.levels.reduce((sum, levelProgress) => sum + levelProgress.attemptsUsed, 0);
   const clearedLevels = progress.levels.filter((levelProgress) => levelProgress.completedAt).length;
   const preferredLevelProgress = preferredCurrentLevelId
     ? progress.levels.find((levelProgress) => levelProgress.levelId === preferredCurrentLevelId) ?? null
@@ -110,8 +109,7 @@ function finalizeProgress(progress: GameProgress, levels: Level[], preferredCurr
 
   return {
     ...progress,
-    totalAttemptsUsed,
-    canResume: totalAttemptsUsed > 0 || clearedLevels > 0,
+    canResume: progress.totalAttemptsUsed > 0 || clearedLevels > 0,
     currentLevelId: canKeepPreferredCurrentLevel ? preferredCurrentLevelId : resolveFallbackCurrentLevelId(progress, levels),
   };
 }
@@ -261,6 +259,10 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
     throw new Error(`Cannot record attempts for locked level "${input.levelId}".`);
   }
 
+  if (currentLevelProgress.status === "failed") {
+    throw new Error(`Cannot record attempts for failed level "${input.levelId}" without restarting it first.`);
+  }
+
   const attemptsForCurrentCycle = input.session.attempts.filter(
     (attempt) => attempt.levelId === input.levelId && attempt.attemptCycle === currentLevelProgress.currentAttemptCycle,
   );
@@ -361,6 +363,7 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
       ...input.session.progress,
       levels: nextLevels,
       lastActiveAt: now,
+      totalAttemptsUsed: input.session.progress.totalAttemptsUsed + (consumedAttempt ? 1 : 0),
       highestUnlockedLevelNumber:
         input.result.score?.passed && level.number < levels.length
           ? Math.max(input.session.progress.highestUnlockedLevelNumber, level.number + 1)

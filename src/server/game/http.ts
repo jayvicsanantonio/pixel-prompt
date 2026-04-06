@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import { levels } from "@/content";
 import { buildLandingExperience, recordAttempt, resolveResumeLevel } from "@/server/game/session-state";
 
 import { evaluateMockAttempt } from "./mock-attempt-evaluator";
-import { getOrCreateSession, getSessionCookieAttributes, saveSession, SESSION_COOKIE_NAME } from "./session-store";
+import { getOrCreateSession, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 
 function getCookieValue(request: Request, cookieName: string) {
   const cookieHeader = request.headers.get("cookie");
@@ -23,7 +25,7 @@ function getCookieValue(request: Request, cookieName: string) {
 
 export async function handleResumeProgress(request: Request) {
   const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
-  const { token, session } = getOrCreateSession(sessionToken);
+  const { token, session } = await getOrCreateSession(sessionToken);
   const response = Response.json({
     ok: true,
     landing: buildLandingExperience(session, levels),
@@ -42,12 +44,29 @@ export async function handleResumeProgress(request: Request) {
 }
 
 export async function handleSubmitAttempt(request: Request) {
-  const body = (await request.json()) as {
+  let body: {
     levelId?: string;
     promptText?: string;
   };
+  try {
+    body = (await request.json()) as {
+      levelId?: string;
+      promptText?: string;
+    };
+  } catch {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_json",
+        message: "The request body must be valid JSON.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
   const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
-  const { token, session } = getOrCreateSession(sessionToken);
+  const { token, session } = await getOrCreateSession(sessionToken);
   const currentLevel = resolveResumeLevel(session.progress, levels);
 
   if (!body.levelId || !body.promptText) {
@@ -89,6 +108,21 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
+  const currentLevelProgress = session.progress.levels.find((levelProgress) => levelProgress.levelId === currentLevel.id);
+
+  if (currentLevelProgress?.status === "failed") {
+    return Response.json(
+      {
+        ok: false,
+        code: "restart_required",
+        message: "This level has no attempts left. Restart the level before submitting again.",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
   const trimmedPrompt = body.promptText.trim();
 
   if (trimmedPrompt.length === 0) {
@@ -117,18 +151,88 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  const attemptId = crypto.randomUUID();
-  const evaluatedAttempt = evaluateMockAttempt(currentLevel, trimmedPrompt, attemptId);
-  const attemptResult = recordAttempt({
-    session,
-    levelId: currentLevel.id,
-    attemptId,
-    promptText: trimmedPrompt,
-    result: evaluatedAttempt.result,
-    generation: evaluatedAttempt.generation,
-  });
+  let mutation;
+  try {
+    mutation = await mutateSession(token, async (activeSession) => {
+      const activeLevel = resolveResumeLevel(activeSession.progress, levels);
 
-  saveSession(token, attemptResult.session);
+      if (!activeLevel || activeSession.progress.currentLevelId == null) {
+        throw new Error("No active level is available for submission.");
+      }
+
+      const activeLevelProgress = activeSession.progress.levels.find(
+        (levelProgress) => levelProgress.levelId === activeLevel.id,
+      );
+
+      if (activeLevel.id !== currentLevel.id) {
+        throw new Error("The current level changed while this submission was being processed.");
+      }
+
+      if (activeLevelProgress?.status === "failed") {
+        throw new Error("This level has no attempts left. Restart it before submitting again.");
+      }
+
+      const attemptId = randomUUID();
+      const evaluatedAttempt = evaluateMockAttempt(activeLevel, trimmedPrompt, attemptId);
+      const attemptResult = recordAttempt({
+        session: activeSession,
+        levelId: activeLevel.id,
+        attemptId,
+        promptText: trimmedPrompt,
+        result: evaluatedAttempt.result,
+        generation: evaluatedAttempt.generation,
+      });
+
+      return {
+        session: attemptResult.session,
+        value: attemptResult,
+      };
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "No active level is available for submission.") {
+        return Response.json(
+          {
+            ok: false,
+            code: "run_complete",
+            message: error.message,
+          },
+          {
+            status: 409,
+          },
+        );
+      }
+
+      if (error.message === "The current level changed while this submission was being processed.") {
+        return Response.json(
+          {
+            ok: false,
+            code: "level_changed",
+            message: error.message,
+          },
+          {
+            status: 409,
+          },
+        );
+      }
+
+      if (error.message === "This level has no attempts left. Restart it before submitting again.") {
+        return Response.json(
+          {
+            ok: false,
+            code: "restart_required",
+            message: error.message,
+          },
+          {
+            status: 409,
+          },
+        );
+      }
+    }
+
+    throw error;
+  }
+  const attemptResult = mutation.value;
 
   const response = Response.json({
     ok: true,
