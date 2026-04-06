@@ -2,22 +2,15 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
-import { resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
 
 function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
 }
 
-function getSessionCookieValue(response: Response) {
-  const cookieHeader = getCookieHeader(response);
-
-  if (!cookieHeader) {
-    throw new Error("Expected a session cookie to be set.");
-  }
-
-  const tokenPart = cookieHeader.split(";")[0];
-
-  return tokenPart.slice(`${SESSION_COOKIE_NAME}=`.length);
+async function createSessionToken() {
+  const { token } = await getOrCreateSession();
+  return token;
 }
 
 describe("game http handlers", () => {
@@ -25,12 +18,12 @@ describe("game http handlers", () => {
     resetSessionStoreForTests();
   });
 
-  it("creates a cookie-scoped session and returns the empty resume payload", async () => {
+  it("returns the empty resume payload without creating a session", async () => {
     const response = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(getCookieHeader(response)).toContain(`${SESSION_COOKIE_NAME}=`);
+    expect(getCookieHeader(response)).toBeNull();
     expect(body).toMatchObject({
       ok: true,
       landing: {
@@ -46,16 +39,12 @@ describe("game http handlers", () => {
         id: "level-1",
         number: 1,
       },
-      progress: {
-        currentLevelId: "level-1",
-        highestUnlockedLevelNumber: 1,
-      },
+      progress: null,
     });
   });
 
   it("rejects invalid prompt submissions without consuming attempts", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
 
     const invalidResponse = await postSubmitAttempt(
       new Request("http://localhost/api/game/submit-attempt", {
@@ -156,17 +145,18 @@ describe("game http handlers", () => {
   });
 
   it("ignores malformed cookie segments while reading the session token", async () => {
+    const sessionToken = await createSessionToken();
     const response = await getResumeProgress(
       new Request("http://localhost/api/game/resume-progress", {
         headers: {
-          cookie: `bad-cookie; ${SESSION_COOKIE_NAME}=existing-token`,
+          cookie: `bad-cookie; ${SESSION_COOKIE_NAME}=${sessionToken}`,
         },
       }),
     );
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(getCookieHeader(response)).toContain(`${SESSION_COOKIE_NAME}=existing-token`);
+    expect(getCookieHeader(response)).toContain(`${SESSION_COOKIE_NAME}=${sessionToken}`);
     expect(body).toMatchObject({
       ok: true,
       progress: {
@@ -176,8 +166,7 @@ describe("game http handlers", () => {
   });
 
   it("records valid submissions and advances the run state", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
 
     const submitResponse = await postSubmitAttempt(
       new Request("http://localhost/api/game/submit-attempt", {
@@ -215,8 +204,7 @@ describe("game http handlers", () => {
   });
 
   it("accepts prompts at the Unicode character limit", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
     const emojiPrompt = "🎨".repeat(120);
 
     const submitResponse = await postSubmitAttempt(
@@ -265,8 +253,7 @@ describe("game http handlers", () => {
   });
 
   it("preserves attempts when the mock provider reports a technical failure", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
 
     const submitResponse = await postSubmitAttempt(
       new Request("http://localhost/api/game/submit-attempt", {
@@ -302,8 +289,7 @@ describe("game http handlers", () => {
   });
 
   it("requires a restart after the final failed attempt", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
 
     for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
       const response = await postSubmitAttempt(
@@ -345,8 +331,7 @@ describe("game http handlers", () => {
   });
 
   it("serializes concurrent submissions against the same session", async () => {
-    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
-    const sessionToken = getSessionCookieValue(resumeResponse);
+    const sessionToken = await createSessionToken();
 
     const [firstResponse, secondResponse] = await Promise.all([
       postSubmitAttempt(

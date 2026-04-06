@@ -254,6 +254,55 @@ describe("session-state", () => {
     });
   });
 
+  it("advances using sorted level order even when level numbers are non-contiguous", () => {
+    const renumberedLevels = levels.map((level, index) => ({
+      ...level,
+      number: [10, 20, 40][index] ?? (index + 1) * 10,
+    }));
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: startedAt,
+      levels: renumberedLevels,
+    });
+
+    const passedLevelOne = recordAttempt({
+      session,
+      levelId: renumberedLevels[0].id,
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-04T00:05:00.000Z",
+      levels: renumberedLevels,
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "openai",
+            model: "gpt-5.4-mini",
+          },
+        },
+      },
+    });
+
+    expect(passedLevelOne.transition).toBe("passed");
+    expect(passedLevelOne.session.progress.currentLevelId).toBe(renumberedLevels[1].id);
+    expect(passedLevelOne.session.progress.highestUnlockedLevelNumber).toBe(renumberedLevels[1].number);
+    expect(passedLevelOne.session.progress.levels[1]).toMatchObject({
+      levelId: renumberedLevels[1].id,
+      status: "in_progress",
+      unlockedAt: "2026-04-04T00:05:00.000Z",
+    });
+  });
+
   it("marks a level as failed on the final scored miss and restarts it with a fresh cycle", () => {
     let session = createGameSession({
       playerId: "player-1",

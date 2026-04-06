@@ -5,7 +5,7 @@ import { buildLandingExperience, recordAttempt, resolveResumeLevel } from "@/ser
 
 import { evaluateMockAttempt } from "./mock-attempt-evaluator";
 import { countPromptCharacters } from "./session-persistence";
-import { getOrCreateSession, getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
+import { getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 
 function getCookieValue(request: Request, cookieName: string) {
   const cookieHeader = request.headers.get("cookie");
@@ -39,7 +39,17 @@ function getCookieValue(request: Request, cookieName: string) {
 
 export async function handleResumeProgress(request: Request) {
   const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
-  const { token, session } = await getOrCreateSession(sessionToken);
+  const session = sessionToken ? await getSessionByToken(sessionToken) : null;
+
+  if (!session) {
+    return Response.json({
+      ok: true,
+      landing: buildLandingExperience(null, levels),
+      currentLevel: levels[0] ?? null,
+      progress: null,
+    });
+  }
+
   const response = Response.json({
     ok: true,
     landing: buildLandingExperience(session, levels),
@@ -49,7 +59,7 @@ export async function handleResumeProgress(request: Request) {
 
   response.headers.append(
     "set-cookie",
-    `${getSessionCookieAttributes().name}=${token}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
+    `${getSessionCookieAttributes().name}=${sessionToken}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
       getSessionCookieAttributes().secure ? "; Secure" : ""
     }`,
   );

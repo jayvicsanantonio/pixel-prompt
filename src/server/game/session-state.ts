@@ -344,11 +344,12 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
 
   let preferredCurrentLevelId: LevelId | null = input.levelId;
   let transition: RecordAttemptResult["transition"];
+  const currentLevelIndex = levels.findIndex((candidate) => candidate.id === level.id);
+  const nextLevel = currentLevelIndex >= 0 ? levels[currentLevelIndex + 1] ?? null : null;
 
   if (!consumedAttempt) {
     transition = input.result.outcome === "rejected" ? "rejected" : "error";
   } else if (input.result.score?.passed) {
-    const nextLevel = levels.find((candidate) => candidate.number === level.number + 1);
     const wasPreviouslyCompleted = Boolean(currentLevelProgress.completedAt);
 
     if (nextLevel && !wasPreviouslyCompleted) {
@@ -374,8 +375,8 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
       lastActiveAt: now,
       totalAttemptsUsed: input.session.progress.totalAttemptsUsed + (consumedAttempt ? 1 : 0),
       highestUnlockedLevelNumber:
-        input.result.score?.passed && level.number < levels.length
-          ? Math.max(input.session.progress.highestUnlockedLevelNumber, level.number + 1)
+        input.result.score?.passed && nextLevel
+          ? Math.max(input.session.progress.highestUnlockedLevelNumber, nextLevel.number)
           : input.session.progress.highestUnlockedLevelNumber,
     },
     levels,
