@@ -4,7 +4,6 @@ import {
   canUseDatabasePersistence,
   loadDatabaseSession,
   mutateDatabaseSession,
-  persistDatabaseSession,
 } from "./session-persistence";
 import { createGameSession, type GameSessionSnapshot } from "./session-state";
 
@@ -89,24 +88,20 @@ export async function getOrCreateSession(token?: string) {
 
   if (canUseDatabasePersistence()) {
     const nextToken = existingToken ?? createSessionToken();
-    const loaded = await loadDatabaseSession(hashSessionToken(nextToken));
-
-    if (loaded.session) {
-      return {
-        token: nextToken,
-        session: loaded.session,
-        created: false,
-      };
-    }
-
-    const nextSession = createSessionSnapshot(loaded.playerId);
-
-    await persistDatabaseSession(hashSessionToken(nextToken), nextSession, getSessionExpiryDate());
+    const result = await mutateDatabaseSession(
+      hashSessionToken(nextToken),
+      (existingPlayerId) => createSessionSnapshot(existingPlayerId),
+      async (currentSession) => ({
+        session: currentSession,
+        value: undefined,
+      }),
+      getSessionExpiryDate(),
+    );
 
     return {
       token: nextToken,
-      session: nextSession,
-      created: true,
+      session: result.session,
+      created: result.created,
     };
   }
 

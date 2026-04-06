@@ -210,7 +210,8 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
   const currentLevelProgress = currentLevel ? findLevelProgress(session.progress, currentLevel.id) : null;
   const levelsCleared = session.progress.levels.filter((levelProgress) => levelProgress.completedAt).length;
   const attemptsRemaining = currentLevelProgress?.attemptsRemaining ?? 0;
-  const bestScore = currentLevelProgress?.bestScore ?? Math.max(...session.progress.levels.map((levelProgress) => levelProgress.bestScore ?? 0));
+  const levelScores = session.progress.levels.map((levelProgress) => levelProgress.bestScore ?? 0);
+  const bestScore = currentLevelProgress?.bestScore ?? (levelScores.length > 0 ? Math.max(...levelScores) : 0);
   const helperText =
     currentLevel && currentLevelProgress?.status === "failed"
       ? "Jump back into the failed level with a fresh attempt cycle when you're ready."

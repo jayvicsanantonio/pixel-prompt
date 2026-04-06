@@ -411,7 +411,9 @@ export async function persistDatabaseSession(
   sessionExpiresAt: Date,
   levels: Level[] = defaultLevels,
 ) {
-  return persistSession(getDatabase(), sessionTokenHash, session, sessionExpiresAt, levels);
+  return getDatabase().transaction(async (tx) => {
+    return persistSession(tx, sessionTokenHash, session, sessionExpiresAt, levels);
+  });
 }
 
 export async function mutateDatabaseSession<T>(
