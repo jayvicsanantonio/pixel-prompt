@@ -112,6 +112,26 @@ describe("game http handlers", () => {
     });
   });
 
+  it("ignores malformed cookie segments while reading the session token", async () => {
+    const response = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `bad-cookie; ${SESSION_COOKIE_NAME}=existing-token`,
+        },
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getCookieHeader(response)).toContain(`${SESSION_COOKIE_NAME}=existing-token`);
+    expect(body).toMatchObject({
+      ok: true,
+      progress: {
+        currentLevelId: "level-1",
+      },
+    });
+  });
+
   it("records valid submissions and advances the run state", async () => {
     const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
     const sessionToken = getSessionCookieValue(resumeResponse);
@@ -147,6 +167,34 @@ describe("game http handlers", () => {
         currentLevelId: "level-2",
         highestUnlockedLevelNumber: 2,
         totalAttemptsUsed: 1,
+      },
+    });
+  });
+
+  it("accepts prompts at the Unicode character limit", async () => {
+    const resumeResponse = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
+    const sessionToken = getSessionCookieValue(resumeResponse);
+    const emojiPrompt = "🎨".repeat(120);
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: emojiPrompt,
+        }),
+      }),
+    );
+
+    expect(submitResponse.status).toBe(200);
+    await expect(submitResponse.json()).resolves.toMatchObject({
+      ok: true,
+      attempt: {
+        promptText: emojiPrompt,
       },
     });
   });

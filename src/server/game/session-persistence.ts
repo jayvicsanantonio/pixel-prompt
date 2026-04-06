@@ -12,6 +12,10 @@ interface LoadedPersistedSession {
   session: GameSessionSnapshot | null;
 }
 
+export function countPromptCharacters(promptText: string) {
+  return Array.from(promptText).length;
+}
+
 function getLevelMap(levels: Level[] = defaultLevels) {
   return new Map(levels.map((level) => [level.id, level]));
 }
@@ -26,6 +30,14 @@ function toIsoString(value: Date | string | null | undefined) {
 
 function toDate(value: string | null | undefined) {
   return value ? new Date(value) : null;
+}
+
+function isSessionExpired(sessionExpiresAt: Date, now = new Date()) {
+  return sessionExpiresAt.getTime() <= now.getTime();
+}
+
+async function lockSessionToken(executor: SessionPersistenceExecutor, sessionTokenHash: string) {
+  await executor.execute(sql`select pg_advisory_xact_lock(hashtext(${sessionTokenHash}), 0)`);
 }
 
 function getCurrentLevelNumber(currentLevelId: string | null, levelsById: Map<string, Level>) {
@@ -203,7 +215,7 @@ function buildAttemptRows(
       attemptCycle: attempt.attemptCycle,
       attemptNumber: attempt.attemptNumber,
       promptText: attempt.promptText,
-      promptCharacterCount: attempt.promptText.length,
+      promptCharacterCount: countPromptCharacters(attempt.promptText),
       targetImageAssetKey: level.targetImage.assetKey,
       lifecycleStatus: attempt.result.status,
       outcome: attempt.result.outcome,
@@ -250,6 +262,13 @@ async function loadPersistedSession(
   if (!player) {
     return {
       playerId: null,
+      session: null,
+    };
+  }
+
+  if (isSessionExpired(player.sessionExpiresAt)) {
+    return {
+      playerId: player.id,
       session: null,
     };
   }
@@ -412,6 +431,7 @@ export async function persistDatabaseSession(
   levels: Level[] = defaultLevels,
 ) {
   return getDatabase().transaction(async (tx) => {
+    await lockSessionToken(tx, sessionTokenHash);
     return persistSession(tx, sessionTokenHash, session, sessionExpiresAt, levels);
   });
 }
@@ -424,6 +444,7 @@ export async function mutateDatabaseSession<T>(
   levels: Level[] = defaultLevels,
 ) {
   return getDatabase().transaction(async (tx) => {
+    await lockSessionToken(tx, sessionTokenHash);
     const loaded = await loadPersistedSession(tx, sessionTokenHash, levels, { lockRun: true });
     const currentSession = loaded.session ?? createSession(loaded.playerId);
     const result = await mutate(currentSession);

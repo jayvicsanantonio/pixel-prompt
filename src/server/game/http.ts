@@ -4,6 +4,7 @@ import { levels } from "@/content";
 import { buildLandingExperience, recordAttempt, resolveResumeLevel } from "@/server/game/session-state";
 
 import { evaluateMockAttempt } from "./mock-attempt-evaluator";
+import { countPromptCharacters } from "./session-persistence";
 import { getOrCreateSession, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 
 function getCookieValue(request: Request, cookieName: string) {
@@ -13,14 +14,27 @@ function getCookieValue(request: Request, cookieName: string) {
     return null;
   }
 
-  const cookies = cookieHeader.split(";").map((entry) => entry.trim());
-  const matchingCookie = cookies.find((cookie) => cookie.startsWith(`${cookieName}=`));
+  for (const entry of cookieHeader.split(";")) {
+    const cookie = entry.trim();
 
-  if (!matchingCookie) {
-    return null;
+    if (!cookie) {
+      continue;
+    }
+
+    const separatorIndex = cookie.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    if (cookie.slice(0, separatorIndex) !== cookieName) {
+      continue;
+    }
+
+    return cookie.slice(separatorIndex + 1);
   }
 
-  return matchingCookie.slice(cookieName.length + 1);
+  return null;
 }
 
 export async function handleResumeProgress(request: Request) {
@@ -125,7 +139,9 @@ export async function handleSubmitAttempt(request: Request) {
 
   const trimmedPrompt = body.promptText.trim();
 
-  if (trimmedPrompt.length === 0) {
+  const promptCharacterCount = countPromptCharacters(trimmedPrompt);
+
+  if (promptCharacterCount === 0) {
     return Response.json(
       {
         ok: false,
@@ -138,7 +154,7 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  if (trimmedPrompt.length > currentLevel.promptCharacterLimit) {
+  if (promptCharacterCount > currentLevel.promptCharacterLimit) {
     return Response.json(
       {
         ok: false,

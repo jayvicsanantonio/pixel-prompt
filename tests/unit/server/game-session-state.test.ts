@@ -378,4 +378,80 @@ describe("session-state", () => {
       }),
     ).toThrow('Cannot record attempts for failed level "level-1" without restarting it first.');
   });
+
+  it("does not allow replay when a previously cleared level is currently failed", () => {
+    const passedLevel = recordAttempt({
+      session: createGameSession({
+        playerId: "player-1",
+        runId: "run-1",
+        now: startedAt,
+      }),
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-04T00:05:00.000Z",
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "openai",
+            model: "gpt-5.4-mini",
+          },
+        },
+      },
+    }).session;
+
+    let replayed = replayLevel({
+      session: passedLevel,
+      levelId: "level-1",
+      now: "2026-04-04T00:10:00.000Z",
+    });
+
+    for (const attemptId of ["attempt-2", "attempt-3", "attempt-4"]) {
+      replayed = recordAttempt({
+        session: replayed,
+        levelId: "level-1",
+        attemptId,
+        promptText: "too generic still life prompt",
+        createdAt: "2026-04-04T00:15:00.000Z",
+        result: {
+          status: "scored",
+          outcome: "failed",
+          tipIds: ["tip-materials"],
+          score: {
+            raw: 0.33,
+            normalized: 33,
+            threshold: 50,
+            passed: false,
+            breakdown: {
+              materials: 22,
+            },
+            scorer: {
+              provider: "openai",
+              model: "gpt-5.4-mini",
+            },
+          },
+        },
+      }).session;
+    }
+
+    expect(replayed.progress.levels[0].completedAt).toBe("2026-04-04T00:05:00.000Z");
+    expect(replayed.progress.levels[0].status).toBe("failed");
+    expect(() =>
+      replayLevel({
+        session: replayed,
+        levelId: "level-1",
+        now: "2026-04-04T00:20:00.000Z",
+      }),
+    ).toThrow('Only currently completed levels can be replayed. Received "failed".');
+  });
 });

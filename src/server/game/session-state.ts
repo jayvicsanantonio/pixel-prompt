@@ -423,8 +423,8 @@ export function replayLevel(input: LevelSessionInput): GameSessionSnapshot {
   const level = findLevel(levels, input.levelId);
   const currentLevelProgress = findLevelProgress(input.session.progress, input.levelId);
 
-  if (!currentLevelProgress.completedAt) {
-    throw new Error(`Only completed levels can be replayed. Level "${input.levelId}" has not been cleared yet.`);
+  if (currentLevelProgress.status !== "passed") {
+    throw new Error(`Only currently completed levels can be replayed. Received "${currentLevelProgress.status}".`);
   }
 
   const nextProgress = finalizeProgress(
