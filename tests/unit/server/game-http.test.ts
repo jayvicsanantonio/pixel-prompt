@@ -1,0 +1,384 @@
+import { beforeEach, describe, expect, it } from "vitest";
+
+import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
+import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
+import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+
+function getCookieHeader(response: Response) {
+  return response.headers.get("set-cookie");
+}
+
+async function createSessionToken() {
+  const { token } = await getOrCreateSession();
+  return token;
+}
+
+describe("game http handlers", () => {
+  beforeEach(() => {
+    resetSessionStoreForTests();
+  });
+
+  it("returns the empty resume payload without creating a session", async () => {
+    const response = await getResumeProgress(new Request("http://localhost/api/game/resume-progress"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getCookieHeader(response)).toBeNull();
+    expect(body).toMatchObject({
+      ok: true,
+      landing: {
+        startHref: "/play?level=1",
+        resume: {
+          available: false,
+          href: "/play?level=1",
+          currentLevelNumber: null,
+          attemptsRemaining: 0,
+        },
+      },
+      currentLevel: {
+        id: "level-1",
+        number: 1,
+      },
+      progress: null,
+    });
+  });
+
+  it("rejects invalid prompt submissions without consuming attempts", async () => {
+    const sessionToken = await createSessionToken();
+
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "   ",
+        }),
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "empty_prompt",
+    });
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(0);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+    });
+  });
+
+  it("returns a 400 for malformed JSON payloads", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: "{",
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_json",
+    });
+  });
+
+  it("returns a 400 for non-object JSON payloads without minting a session", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: "null",
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    expect(getCookieHeader(invalidResponse)).toBeNull();
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_request",
+      message: "Request body must be a JSON object.",
+    });
+  });
+
+  it("returns a 400 for invalid JSON field types without minting a session", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: 123,
+        }),
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    expect(getCookieHeader(invalidResponse)).toBeNull();
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_request",
+      message: "Both levelId and promptText are required.",
+    });
+  });
+
+  it("ignores malformed cookie segments while reading the session token", async () => {
+    const sessionToken = await createSessionToken();
+    const response = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `bad-cookie; ${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(getCookieHeader(response)).toContain(`${SESSION_COOKIE_NAME}=${sessionToken}`);
+    expect(body).toMatchObject({
+      ok: true,
+      progress: {
+        currentLevelId: "level-1",
+      },
+    });
+  });
+
+  it("records valid submissions and advances the run state", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life of pears and a bottle on a wooden table",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "passed",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: true,
+      },
+      currentLevel: {
+        id: "level-2",
+        number: 2,
+      },
+      progress: {
+        currentLevelId: "level-2",
+        highestUnlockedLevelNumber: 2,
+        totalAttemptsUsed: 1,
+      },
+    });
+  });
+
+  it("accepts prompts at the Unicode character limit", async () => {
+    const sessionToken = await createSessionToken();
+    const emojiPrompt = "🎨".repeat(120);
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: emojiPrompt,
+        }),
+      }),
+    );
+
+    expect(submitResponse.status).toBe(200);
+    await expect(submitResponse.json()).resolves.toMatchObject({
+      ok: true,
+      attempt: {
+        promptText: emojiPrompt,
+      },
+    });
+  });
+
+  it("does not mint a session cookie for a first submission to the wrong level", async () => {
+    const mismatchResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          levelId: "level-2",
+          promptText: "sunlit still life",
+        }),
+      }),
+    );
+
+    expect(mismatchResponse.status).toBe(409);
+    expect(getCookieHeader(mismatchResponse)).toBeNull();
+    await expect(mismatchResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "level_mismatch",
+    });
+  });
+
+  it("preserves attempts when the mock provider reports a technical failure", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #timeout",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "error",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        result: {
+          status: "technical_failure",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
+  it("requires a restart after the final failed attempt", async () => {
+    const sessionToken = await createSessionToken();
+
+    for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
+      const response = await postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    }
+
+    const blockedResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(blockedResponse.status).toBe(409);
+    await expect(blockedResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "restart_required",
+    });
+  });
+
+  it("serializes concurrent submissions against the same session", async () => {
+    const sessionToken = await createSessionToken();
+
+    const [firstResponse, secondResponse] = await Promise.all([
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+    ]);
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(2);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      attemptsUsed: 2,
+      attemptsRemaining: 1,
+    });
+  });
+});

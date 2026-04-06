@@ -80,6 +80,7 @@ export interface LevelAttempt {
   id: AttemptId;
   runId: GameRunId;
   levelId: LevelId;
+  attemptCycle: number;
   attemptNumber: number;
   promptText: string;
   createdAt: IsoDateTime;
@@ -91,12 +92,15 @@ export interface LevelAttempt {
 export interface LevelProgress {
   levelId: LevelId;
   status: LevelStatus;
+  currentAttemptCycle: number;
   attemptsUsed: number;
   attemptsRemaining: number;
   bestScore: number | null;
   strongestAttemptId?: AttemptId | null;
   unlockedAt?: IsoDateTime | null;
   completedAt?: IsoDateTime | null;
+  lastCompletedAt?: IsoDateTime | null;
+  lastAttemptedAt?: IsoDateTime | null;
 }
 
 export interface GameProgress {
