@@ -112,6 +112,49 @@ describe("game http handlers", () => {
     });
   });
 
+  it("returns a 400 for non-object JSON payloads without minting a session", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: "null",
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    expect(getCookieHeader(invalidResponse)).toBeNull();
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_request",
+      message: "Request body must be a JSON object.",
+    });
+  });
+
+  it("returns a 400 for invalid JSON field types without minting a session", async () => {
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: 123,
+        }),
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    expect(getCookieHeader(invalidResponse)).toBeNull();
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "invalid_request",
+      message: "Both levelId and promptText are required.",
+    });
+  });
+
   it("ignores malformed cookie segments while reading the session token", async () => {
     const response = await getResumeProgress(
       new Request("http://localhost/api/game/resume-progress", {
@@ -196,6 +239,28 @@ describe("game http handlers", () => {
       attempt: {
         promptText: emojiPrompt,
       },
+    });
+  });
+
+  it("does not mint a session cookie for a first submission to the wrong level", async () => {
+    const mismatchResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          levelId: "level-2",
+          promptText: "sunlit still life",
+        }),
+      }),
+    );
+
+    expect(mismatchResponse.status).toBe(409);
+    expect(getCookieHeader(mismatchResponse)).toBeNull();
+    await expect(mismatchResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "level_mismatch",
     });
   });
 

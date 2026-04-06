@@ -5,7 +5,7 @@ import { buildLandingExperience, recordAttempt, resolveResumeLevel } from "@/ser
 
 import { evaluateMockAttempt } from "./mock-attempt-evaluator";
 import { countPromptCharacters } from "./session-persistence";
-import { getOrCreateSession, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
+import { getOrCreateSession, getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 
 function getCookieValue(request: Request, cookieName: string) {
   const cookieHeader = request.headers.get("cookie");
@@ -58,15 +58,9 @@ export async function handleResumeProgress(request: Request) {
 }
 
 export async function handleSubmitAttempt(request: Request) {
-  let body: {
-    levelId?: string;
-    promptText?: string;
-  };
+  let rawBody: unknown;
   try {
-    body = (await request.json()) as {
-      levelId?: string;
-      promptText?: string;
-    };
+    rawBody = await request.json();
   } catch {
     return Response.json(
       {
@@ -79,11 +73,23 @@ export async function handleSubmitAttempt(request: Request) {
       },
     );
   }
-  const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
-  const { token, session } = await getOrCreateSession(sessionToken);
-  const currentLevel = resolveResumeLevel(session.progress, levels);
 
-  if (!body.levelId || !body.promptText) {
+  if (typeof rawBody !== "object" || rawBody === null || Array.isArray(rawBody)) {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_request",
+        message: "Request body must be a JSON object.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
+  const { levelId, promptText } = rawBody as Record<string, unknown>;
+
+  if (typeof levelId !== "string" || typeof promptText !== "string") {
     return Response.json(
       {
         ok: false,
@@ -96,49 +102,22 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  if (!currentLevel || session.progress.currentLevelId == null) {
+  const requestedLevel = levels.find((level) => level.id === levelId);
+
+  if (!requestedLevel) {
     return Response.json(
       {
         ok: false,
-        code: "run_complete",
-        message: "No active level is available for submission.",
+        code: "invalid_request",
+        message: "The request references an unknown level.",
       },
       {
-        status: 409,
+        status: 400,
       },
     );
   }
 
-  if (body.levelId !== currentLevel.id) {
-    return Response.json(
-      {
-        ok: false,
-        code: "level_mismatch",
-        message: "Submissions are only accepted for the current active level.",
-      },
-      {
-        status: 409,
-      },
-    );
-  }
-
-  const currentLevelProgress = session.progress.levels.find((levelProgress) => levelProgress.levelId === currentLevel.id);
-
-  if (currentLevelProgress?.status === "failed") {
-    return Response.json(
-      {
-        ok: false,
-        code: "restart_required",
-        message: "This level has no attempts left. Restart the level before submitting again.",
-      },
-      {
-        status: 409,
-      },
-    );
-  }
-
-  const trimmedPrompt = body.promptText.trim();
-
+  const trimmedPrompt = promptText.trim();
   const promptCharacterCount = countPromptCharacters(trimmedPrompt);
 
   if (promptCharacterCount === 0) {
@@ -154,12 +133,12 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  if (promptCharacterCount > currentLevel.promptCharacterLimit) {
+  if (promptCharacterCount > requestedLevel.promptCharacterLimit) {
     return Response.json(
       {
         ok: false,
         code: "prompt_too_long",
-        message: `Keep the prompt at ${currentLevel.promptCharacterLimit} characters or fewer.`,
+        message: `Keep the prompt at ${requestedLevel.promptCharacterLimit} characters or fewer.`,
       },
       {
         status: 400,
@@ -167,9 +146,56 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
+  const sessionToken = getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined;
+  const existingSession = sessionToken ? await getSessionByToken(sessionToken) : null;
+  const currentLevel = existingSession ? resolveResumeLevel(existingSession.progress, levels) : (levels[0] ?? null);
+
+  if (!currentLevel || (existingSession && existingSession.progress.currentLevelId == null)) {
+    return Response.json(
+      {
+        ok: false,
+        code: "run_complete",
+        message: "No active level is available for submission.",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  if (levelId !== currentLevel.id) {
+    return Response.json(
+      {
+        ok: false,
+        code: "level_mismatch",
+        message: "Submissions are only accepted for the current active level.",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  const currentLevelProgress = existingSession?.progress.levels.find(
+    (levelProgress) => levelProgress.levelId === currentLevel.id,
+  );
+
+  if (currentLevelProgress?.status === "failed") {
+    return Response.json(
+      {
+        ok: false,
+        code: "restart_required",
+        message: "This level has no attempts left. Restart the level before submitting again.",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
   let mutation;
   try {
-    mutation = await mutateSession(token, async (activeSession) => {
+    mutation = await mutateSession(sessionToken, async (activeSession) => {
       const activeLevel = resolveResumeLevel(activeSession.progress, levels);
 
       if (!activeLevel || activeSession.progress.currentLevelId == null) {
@@ -180,7 +206,7 @@ export async function handleSubmitAttempt(request: Request) {
         (levelProgress) => levelProgress.levelId === activeLevel.id,
       );
 
-      if (activeLevel.id !== currentLevel.id) {
+      if (activeLevel.id !== levelId) {
         throw new Error("The current level changed while this submission was being processed.");
       }
 
@@ -261,7 +287,7 @@ export async function handleSubmitAttempt(request: Request) {
 
   response.headers.append(
     "set-cookie",
-    `${getSessionCookieAttributes().name}=${token}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
+    `${getSessionCookieAttributes().name}=${mutation.token}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
       getSessionCookieAttributes().secure ? "; Secure" : ""
     }`,
   );

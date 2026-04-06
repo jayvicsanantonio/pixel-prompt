@@ -256,12 +256,20 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
   const level = findLevel(levels, input.levelId);
   const currentLevelProgress = findLevelProgress(input.session.progress, input.levelId);
 
+  if (input.session.progress.currentLevelId !== input.levelId) {
+    throw new Error(`Cannot record attempts for non-current level "${input.levelId}".`);
+  }
+
   if (currentLevelProgress.status === "locked") {
     throw new Error(`Cannot record attempts for locked level "${input.levelId}".`);
   }
 
   if (currentLevelProgress.status === "failed") {
     throw new Error(`Cannot record attempts for failed level "${input.levelId}" without restarting it first.`);
+  }
+
+  if (currentLevelProgress.status === "passed") {
+    throw new Error(`Cannot record attempts for passed level "${input.levelId}" without replaying it first.`);
   }
 
   const attemptsForCurrentCycle = input.session.attempts.filter(

@@ -172,6 +172,22 @@ function buildLevelAttempt(
   };
 }
 
+export function buildPersistedAttempts(attemptRows: Array<typeof levelAttempts.$inferSelect>) {
+  const runningStrongestByLevel = new Map<string, number | null>();
+
+  return attemptRows.map((attempt) => {
+    const previousStrongest = runningStrongestByLevel.get(attempt.levelId) ?? null;
+    const nextStrongest =
+      attempt.scoreNormalized == null
+        ? previousStrongest
+        : Math.max(previousStrongest ?? attempt.scoreNormalized, attempt.scoreNormalized);
+
+    runningStrongestByLevel.set(attempt.levelId, nextStrongest);
+
+    return buildLevelAttempt(attempt, nextStrongest);
+  });
+}
+
 function buildProgressRows(
   session: GameSessionSnapshot,
   now: Date,
@@ -300,7 +316,6 @@ async function loadPersistedSession(
     .from(runLevelProgress)
     .where(eq(runLevelProgress.runId, run.id))
     .orderBy(asc(runLevelProgress.levelNumber));
-  const strongestScoreByLevel = new Map(progressRows.map((row) => [row.levelId, row.bestScore ?? null]));
   const attemptRows = await executor
     .select()
     .from(levelAttempts)
@@ -329,7 +344,7 @@ async function loadPersistedSession(
         lastAttemptedAt: toIsoString(row.lastAttemptedAt),
       })),
     },
-    attempts: attemptRows.map((attempt) => buildLevelAttempt(attempt, strongestScoreByLevel.get(attempt.levelId) ?? null)),
+    attempts: buildPersistedAttempts(attemptRows),
   };
 
   return {

@@ -379,6 +379,119 @@ describe("session-state", () => {
     ).toThrow('Cannot record attempts for failed level "level-1" without restarting it first.');
   });
 
+  it("rejects attempts against a non-current level", () => {
+    const passedLevelOne = recordAttempt({
+      session: createGameSession({
+        playerId: "player-1",
+        runId: "run-1",
+        now: startedAt,
+      }),
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-04T00:05:00.000Z",
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "openai",
+            model: "gpt-5.4-mini",
+          },
+        },
+      },
+    }).session;
+
+    expect(() =>
+      recordAttempt({
+        session: passedLevelOne,
+        levelId: "level-1",
+        attemptId: "attempt-2",
+        promptText: "another still life",
+        createdAt: "2026-04-04T00:10:00.000Z",
+        result: {
+          status: "scored",
+          outcome: "failed",
+          tipIds: [],
+          score: {
+            raw: 0.33,
+            normalized: 33,
+            threshold: 50,
+            passed: false,
+            breakdown: {
+              subject: 30,
+            },
+            scorer: {
+              provider: "openai",
+              model: "gpt-5.4-mini",
+            },
+          },
+        },
+      }),
+    ).toThrow('Cannot record attempts for non-current level "level-1".');
+  });
+
+  it("rejects attempts for a passed level until it is replayed", () => {
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: startedAt,
+    });
+    const passedLevel = {
+      ...session,
+      progress: {
+        ...session.progress,
+        currentLevelId: "level-1",
+        levels: session.progress.levels.map((levelProgress) =>
+          levelProgress.levelId === "level-1"
+            ? {
+                ...levelProgress,
+                status: "passed" as const,
+                completedAt: "2026-04-04T00:05:00.000Z",
+                lastCompletedAt: "2026-04-04T00:05:00.000Z",
+              }
+            : levelProgress,
+        ),
+      },
+    };
+
+    expect(() =>
+      recordAttempt({
+        session: passedLevel,
+        levelId: "level-1",
+        attemptId: "attempt-2",
+        promptText: "another still life",
+        createdAt: "2026-04-04T00:10:00.000Z",
+        result: {
+          status: "scored",
+          outcome: "failed",
+          tipIds: [],
+          score: {
+            raw: 0.33,
+            normalized: 33,
+            threshold: 50,
+            passed: false,
+            breakdown: {
+              subject: 30,
+            },
+            scorer: {
+              provider: "openai",
+              model: "gpt-5.4-mini",
+            },
+          },
+        },
+      }),
+    ).toThrow('Cannot record attempts for passed level "level-1" without replaying it first.');
+  });
+
   it("does not allow replay when a previously cleared level is currently failed", () => {
     const passedLevel = recordAttempt({
       session: createGameSession({
