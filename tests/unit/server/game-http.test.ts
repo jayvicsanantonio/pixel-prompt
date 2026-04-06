@@ -83,6 +83,46 @@ describe("game http handlers", () => {
     });
   });
 
+  it("rejects over-limit prompts without consuming attempts", async () => {
+    const sessionToken = await createSessionToken();
+
+    const invalidResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "a".repeat(121),
+        }),
+      }),
+    );
+
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "prompt_too_long",
+    });
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(0);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+    });
+  });
+
   it("returns a 400 for malformed JSON payloads", async () => {
     const invalidResponse = await postSubmitAttempt(
       new Request("http://localhost/api/game/submit-attempt", {
@@ -203,6 +243,37 @@ describe("game http handlers", () => {
     });
   });
 
+  it("attaches retry tips to scored failed submissions", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "retry",
+      attempt: {
+        consumedAttempt: true,
+        result: {
+          tipIds: ["tip-composition-specificity", "tip-context-specificity"],
+        },
+      },
+    });
+  });
+
   it("accepts prompts at the Unicode character limit", async () => {
     const sessionToken = await createSessionToken();
     const emojiPrompt = "🎨".repeat(120);
@@ -288,6 +359,42 @@ describe("game http handlers", () => {
     });
   });
 
+  it("preserves attempts when the mock provider reports a content-policy rejection", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #policy",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "rejected",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        result: {
+          status: "content_policy_rejected",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
   it("requires a restart after the final failed attempt", async () => {
     const sessionToken = await createSessionToken();
 
@@ -330,7 +437,7 @@ describe("game http handlers", () => {
     });
   });
 
-  it("serializes concurrent submissions against the same session", async () => {
+  it("deduplicates concurrent submissions against the same session", async () => {
     const sessionToken = await createSessionToken();
 
     const [firstResponse, secondResponse] = await Promise.all([
@@ -364,6 +471,10 @@ describe("game http handlers", () => {
 
     expect(firstResponse.status).toBe(200);
     expect(secondResponse.status).toBe(200);
+    const firstBody = await firstResponse.json();
+    const secondBody = await secondResponse.json();
+
+    expect(secondBody.attempt.id).toBe(firstBody.attempt.id);
 
     const resumedResponse = await getResumeProgress(
       new Request("http://localhost/api/game/resume-progress", {
@@ -374,11 +485,53 @@ describe("game http handlers", () => {
     );
     const resumedBody = await resumedResponse.json();
 
-    expect(resumedBody.progress.totalAttemptsUsed).toBe(2);
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(1);
     expect(resumedBody.progress.levels[0]).toMatchObject({
       levelId: "level-1",
-      attemptsUsed: 2,
-      attemptsRemaining: 1,
+      attemptsUsed: 1,
+      attemptsRemaining: 2,
     });
+  });
+
+  it("returns the same pass result for concurrent duplicate submissions that advance the run", async () => {
+    const sessionToken = await createSessionToken();
+
+    const [firstResponse, duplicateResponse] = await Promise.all([
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "sunlit still life of pears and a bottle on a wooden table",
+          }),
+        }),
+      ),
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "sunlit still life of pears and a bottle on a wooden table",
+          }),
+        }),
+      ),
+    ]);
+    const firstBody = await firstResponse.json();
+    const duplicateBody = await duplicateResponse.json();
+
+    expect(firstResponse.status).toBe(200);
+    expect(duplicateResponse.status).toBe(200);
+    expect(duplicateBody.attempt.id).toBe(firstBody.attempt.id);
+    expect(duplicateBody.transition).toBe("passed");
+    expect(duplicateBody.progress.totalAttemptsUsed).toBe(1);
+    expect(duplicateBody.progress.currentLevelId).toBe("level-2");
   });
 });

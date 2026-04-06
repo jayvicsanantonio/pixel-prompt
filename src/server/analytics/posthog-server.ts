@@ -18,15 +18,22 @@ export function createServerAnalyticsClient() {
   });
 }
 
-export async function captureServerAnalyticsEvent(event: AnalyticsEvent) {
+export async function captureServerAnalyticsEvents(events: AnalyticsEvent[]) {
   const client = createServerAnalyticsClient();
 
-  if (!client) {
+  if (!client || events.length === 0) {
     return;
   }
 
-  const payload = toAnalyticsCaptureInput(event);
+  for (const event of events) {
+    const payload = toAnalyticsCaptureInput(event);
 
-  client.capture(payload);
+    client.capture(payload);
+  }
+
   await client.shutdown();
+}
+
+export async function captureServerAnalyticsEvent(event: AnalyticsEvent) {
+  await captureServerAnalyticsEvents([event]);
 }
