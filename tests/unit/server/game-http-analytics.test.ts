@@ -17,6 +17,10 @@ async function createSessionToken() {
   return token;
 }
 
+async function flushBackgroundAnalytics() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("game http analytics", () => {
   beforeEach(() => {
     resetSessionStoreForTests();
@@ -39,6 +43,7 @@ describe("game http analytics", () => {
         }),
       }),
     );
+    await flushBackgroundAnalytics();
 
     captureServerAnalyticsEvents.mockClear();
 
@@ -51,10 +56,17 @@ describe("game http analytics", () => {
     );
 
     expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
-    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0].map((event: { name: string }) => event.name)).toEqual([
-      "landing_viewed",
-      "resume_offered",
+    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: "landing_viewed",
+      }),
+      expect.objectContaining({
+        name: "resume_offered",
+        levelId: "level-1",
+        levelNumber: 1,
+      }),
     ]);
   });
 
@@ -76,6 +88,7 @@ describe("game http analytics", () => {
     );
 
     expect(response.status).toBe(400);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
     expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
       expect.objectContaining({
@@ -104,6 +117,7 @@ describe("game http analytics", () => {
     );
 
     expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
     expect(captureServerAnalyticsEvents.mock.calls[0]?.[0].map((event: { name: string }) => event.name)).toEqual([
       "prompt_submitted",
@@ -132,6 +146,7 @@ describe("game http analytics", () => {
     );
 
     expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
     expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
       expect.objectContaining({
@@ -174,6 +189,7 @@ describe("game http analytics", () => {
         }),
       }),
     );
+    await flushBackgroundAnalytics();
 
     captureServerAnalyticsEvents.mockClear();
 
@@ -192,6 +208,7 @@ describe("game http analytics", () => {
     );
 
     expect(finalResponse.status).toBe(200);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
     expect(captureServerAnalyticsEvents.mock.calls[0]?.[0].map((event: { name: string }) => event.name)).toEqual([
       "prompt_submitted",
@@ -237,6 +254,7 @@ describe("game http analytics", () => {
 
     expect(firstResponse.status).toBe(200);
     expect(duplicateResponse.status).toBe(200);
+    await flushBackgroundAnalytics();
     expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
   });
 });

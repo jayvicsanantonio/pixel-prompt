@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 
+import { after } from "next/server";
 import type { AnalyticsEvent } from "@/lib/analytics";
 import { captureServerAnalyticsEvents } from "@/server/analytics";
 import { levels } from "@/content";
+import type { Level } from "@/lib/game";
 import { buildLandingExperience, recordAttempt, resolveResumeLevel, type RecordAttemptResult } from "@/server/game/session-state";
 
 import {
@@ -59,11 +61,30 @@ async function captureAnalytics(events: Array<AnalyticsEvent | null>) {
   }
 }
 
+function scheduleAnalyticsCapture(events: Array<AnalyticsEvent | null>) {
+  const filteredEvents = events.filter((event): event is AnalyticsEvent => event != null);
+
+  if (filteredEvents.length === 0) {
+    return;
+  }
+
+  const task = () => captureAnalytics(filteredEvents);
+
+  try {
+    after(task);
+  } catch {
+    setTimeout(() => {
+      void task();
+    }, 0);
+  }
+}
+
 type SubmitAttemptOutcome =
   | {
       status: 200;
       token: string | undefined;
       attemptResult: RecordAttemptResult;
+      analyticsLevel: Level;
     }
   | {
       status: 409;
@@ -113,7 +134,7 @@ export async function handleResumeProgress(request: Request) {
   const currentLevel = session ? resolveResumeLevel(session.progress, levels) : (levels[0] ?? null);
 
   if (!session) {
-    await captureAnalytics(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session: null }));
+    scheduleAnalyticsCapture(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session: null }));
 
     return Response.json({
       ok: true,
@@ -123,7 +144,7 @@ export async function handleResumeProgress(request: Request) {
     });
   }
 
-  await captureAnalytics(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session }));
+  scheduleAnalyticsCapture(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session }));
 
   const response = Response.json({
     ok: true,
@@ -208,7 +229,7 @@ export async function handleSubmitAttempt(request: Request) {
   const promptCharacterCount = countPromptCharacters(trimmedPrompt);
 
   if (promptCharacterCount === 0) {
-    await captureAnalytics([
+    scheduleAnalyticsCapture([
       buildPromptValidationFailedAnalyticsEvent({
         occurredAt: new Date().toISOString(),
         level: requestedLevel,
@@ -231,7 +252,7 @@ export async function handleSubmitAttempt(request: Request) {
   }
 
   if (promptCharacterCount > requestedLevel.promptCharacterLimit) {
-    await captureAnalytics([
+    scheduleAnalyticsCapture([
       buildPromptValidationFailedAnalyticsEvent({
         occurredAt: new Date().toISOString(),
         level: requestedLevel,
@@ -299,7 +320,12 @@ export async function handleSubmitAttempt(request: Request) {
   }
 
   const submission = await withPendingSubmissionDedup(
-    createSubmissionDedupKey(sessionToken, levelId, trimmedPrompt),
+    createSubmissionDedupKey({
+      sessionToken,
+      request,
+      levelId,
+      promptText: trimmedPrompt,
+    }),
     async (): Promise<SubmitAttemptOutcome> => {
       let mutation;
       const submissionStartedAt = Date.now();
@@ -337,7 +363,10 @@ export async function handleSubmitAttempt(request: Request) {
 
           return {
             session: attemptResult.session,
-            value: attemptResult,
+            value: {
+              attemptResult,
+              analyticsLevel: activeLevel,
+            },
           };
         });
       } catch (error) {
@@ -379,14 +408,14 @@ export async function handleSubmitAttempt(request: Request) {
         throw error;
       }
 
-      const attemptResult = mutation.value;
+      const { attemptResult, analyticsLevel } = mutation.value;
       const occurredAt = new Date().toISOString();
       const totalDurationMs = Date.now() - submissionStartedAt;
 
-      await captureAnalytics(
+      scheduleAnalyticsCapture(
         buildSubmitAttemptAnalyticsEvents({
           attemptResult,
-          level: requestedLevel,
+          level: analyticsLevel,
           occurredAt,
           promptLength: promptCharacterCount,
           totalDurationMs,
@@ -397,6 +426,7 @@ export async function handleSubmitAttempt(request: Request) {
         status: 200,
         token: mutation.token,
         attemptResult,
+        analyticsLevel,
       };
     },
   );

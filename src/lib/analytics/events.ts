@@ -34,7 +34,8 @@ const gameStartedEventSchema = analyticsBaseSchema.extend({
 const resumeOfferedEventSchema = analyticsBaseSchema.extend({
   name: z.literal("resume_offered"),
   runId: z.string().min(1),
-  currentLevelId: z.string().min(1),
+  levelId: z.string().min(1),
+  levelNumber: z.number().int().positive(),
   highestUnlockedLevelNumber: z.number().int().positive(),
 });
 

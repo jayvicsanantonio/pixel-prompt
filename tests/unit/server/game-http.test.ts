@@ -8,6 +8,16 @@ function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
 }
 
+function getSessionTokenFromCookieHeader(cookieHeader: string | null) {
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const match = cookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+
+  return match?.[1] ?? null;
+}
+
 async function createSessionToken() {
   const { token } = await getOrCreateSession();
   return token;
@@ -488,6 +498,62 @@ describe("game http handlers", () => {
     expect(resumedBody.progress.totalAttemptsUsed).toBe(1);
     expect(resumedBody.progress.levels[0]).toMatchObject({
       levelId: "level-1",
+      attemptsUsed: 1,
+      attemptsRemaining: 2,
+    });
+  });
+
+  it("deduplicates concurrent first submissions before a session cookie exists", async () => {
+    const [firstResponse, secondResponse] = await Promise.all([
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "pixel-prompt-test",
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+      postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "pixel-prompt-test",
+          },
+          body: JSON.stringify({
+            levelId: "level-1",
+            promptText: "vague",
+          }),
+        }),
+      ),
+    ]);
+    const firstBody = await firstResponse.json();
+    const secondBody = await secondResponse.json();
+    const firstSessionToken = getSessionTokenFromCookieHeader(getCookieHeader(firstResponse));
+    const secondSessionToken = getSessionTokenFromCookieHeader(getCookieHeader(secondResponse));
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(firstBody.attempt.id).toBe(secondBody.attempt.id);
+    expect(firstSessionToken).toBeTruthy();
+    expect(secondSessionToken).toBe(firstSessionToken);
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${firstSessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(1);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
       attemptsUsed: 1,
       attemptsRemaining: 2,
     });

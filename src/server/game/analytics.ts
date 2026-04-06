@@ -63,7 +63,8 @@ export function buildResumeProgressAnalyticsEvents(input: ResumeProgressAnalytic
         occurredAt: input.occurredAt,
         anonymousPlayerId,
         runId: input.session.progress.runId,
-        currentLevelId: input.currentLevel.id,
+        levelId: input.currentLevel.id,
+        levelNumber: input.currentLevel.number,
         highestUnlockedLevelNumber: input.session.progress.highestUnlockedLevelNumber,
       }),
     );
@@ -93,8 +94,11 @@ export function buildSubmitAttemptAnalyticsEvents(input: SubmitAttemptAnalyticsI
   const { attempt, session, transition } = attemptResult;
   const anonymousPlayerId = session.progress.playerId;
   const totalDurationMs = Math.max(0, input.totalDurationMs);
-  const generationDurationMs = attempt.result.status === "scored" ? Math.floor(totalDurationMs / 2) : totalDurationMs;
-  const scoringDurationMs = totalDurationMs - generationDurationMs;
+  // Until generation and scoring are timed independently, keep generation latency
+  // as the full backend attempt duration and scoring latency at zero rather than
+  // emitting a made-up split.
+  const generationDurationMs = totalDurationMs;
+  const scoringDurationMs = 0;
   const generation = attempt.generation;
   const failureKind = mapProviderFailureKind(attempt);
   const events: AnalyticsEvent[] = [
