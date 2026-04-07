@@ -1,4 +1,5 @@
 import { buildGeneratedOutputAssetKey, persistGeneratedOutput } from "./generated-output-store";
+import { createProviderAbortState } from "./abort";
 import type {
   ImageGenerationProvider,
   ImageGenerationRequest,
@@ -35,24 +36,9 @@ interface OpenAiImageGenerationProviderOptions {
   timeoutMs?: number;
 }
 
-function getAbortSignal(timeoutMs: number) {
-  if (typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(timeoutMs);
-  }
-
-  return undefined;
-}
-
-function isTimedAbort(error: unknown, signal?: AbortSignal) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  if (error.name === "TimeoutError") {
-    return true;
-  }
-
-  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
+interface ParsedJsonResponse<T> {
+  failure?: ProviderFailure;
+  payload: T | null;
 }
 
 function toIsoDateTime(created?: number) {
@@ -112,11 +98,38 @@ function resolveFailureKind(response: Response, errorPayload?: OpenAiErrorRespon
   };
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T | null> {
+async function parseJsonResponseWithAbortHandling<T>(input: {
+  abortState: ReturnType<typeof createProviderAbortState>;
+  interruptedCode: string;
+  interruptedMessage: string;
+  response: Response;
+  timeoutCode: string;
+  timeoutMessage: string;
+}): Promise<ParsedJsonResponse<T>> {
   try {
-    return (await response.json()) as T;
-  } catch {
-    return null;
+    return {
+      payload: (await input.response.json()) as T,
+    };
+  } catch (error) {
+    const abortClassification = input.abortState.classifyError(error);
+
+    if (abortClassification === "timeout") {
+      return {
+        failure: buildProviderFailure("timeout", input.timeoutCode, input.timeoutMessage, true),
+        payload: null,
+      };
+    }
+
+    if (abortClassification === "interrupted") {
+      return {
+        failure: buildProviderFailure("interrupted", input.interruptedCode, input.interruptedMessage, true),
+        payload: null,
+      };
+    }
+
+    return {
+      payload: null,
+    };
   }
 }
 
@@ -153,11 +166,24 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
-    let response: Response;
-    const signal = getAbortSignal(this.timeoutMs);
+    if (request.signal?.aborted) {
+      return buildProviderFailure(
+        "interrupted",
+        "openai_generation_interrupted",
+        "The generation request was interrupted before OpenAI returned an image.",
+        true,
+      );
+    }
+
+    const abortState = createProviderAbortState({
+      requestSignal: request.signal,
+      timeoutMs: this.timeoutMs,
+      timeoutMessage: "OpenAI image generation timed out before returning an image.",
+      interruptedMessage: "The generation request was interrupted before OpenAI returned an image.",
+    });
 
     try {
-      response = await this.fetchImpl(OPENAI_IMAGE_GENERATIONS_URL, {
+      const response = await this.fetchImpl(OPENAI_IMAGE_GENERATIONS_URL, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.apiKey}`,
@@ -167,14 +193,102 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
           model: this.modelRef.model,
           prompt: request.prompt,
         }),
-        signal,
+        signal: abortState.signal,
       });
+      if (!response.ok) {
+        const { failure, payload: errorPayload } = await parseJsonResponseWithAbortHandling<OpenAiErrorResponse>({
+          abortState,
+          interruptedCode: "openai_generation_interrupted",
+          interruptedMessage: "The generation request was interrupted before OpenAI returned an image.",
+          response,
+          timeoutCode: "openai_generation_timeout",
+          timeoutMessage: "OpenAI image generation timed out before returning an image.",
+        });
+
+        if (failure) {
+          return failure;
+        }
+
+        const resolvedFailure = resolveFailureKind(response, errorPayload);
+
+        return buildProviderFailure(
+          resolvedFailure.kind,
+          errorPayload?.error?.code || `openai_http_${response.status}`,
+          errorPayload?.error?.message || `OpenAI image generation failed with status ${response.status}.`,
+          resolvedFailure.retryable,
+        );
+      }
+
+      const { failure, payload } = await parseJsonResponseWithAbortHandling<OpenAiImageGenerationResponse>({
+        abortState,
+        interruptedCode: "openai_generation_interrupted",
+        interruptedMessage: "The generation request was interrupted before OpenAI returned an image.",
+        response,
+        timeoutCode: "openai_generation_timeout",
+        timeoutMessage: "OpenAI image generation timed out before returning an image.",
+      });
+
+      if (failure) {
+        return failure;
+      }
+
+      const firstImage = payload?.data?.[0];
+
+      if (!firstImage?.b64_json) {
+        return buildProviderFailure(
+          "technical_failure",
+          "openai_missing_image_data",
+          "OpenAI returned a successful response without image data.",
+          true,
+        );
+      }
+
+      const assetKey = buildGeneratedOutputAssetKey({
+        providerId: this.providerId,
+        levelId: request.context.levelId,
+        attemptId: request.context.attemptId,
+      });
+
+      try {
+        await persistGeneratedOutput({
+          assetKey,
+          imageBase64: firstImage.b64_json,
+        });
+      } catch (error) {
+        return buildProviderFailure(
+          "technical_failure",
+          "generated_output_persist_failed",
+          error instanceof Error
+            ? `Generated image could not be persisted at ${assetKey}: ${error.message}`
+            : `Generated image could not be persisted at ${assetKey}.`,
+          true,
+        );
+      }
+
+      return {
+        ok: true,
+        assetKey,
+        createdAt: toIsoDateTime(payload?.created),
+        provider: this.modelRef,
+        revisedPrompt: firstImage.revised_prompt ?? null,
+      };
     } catch (error) {
-      if (isTimedAbort(error, signal)) {
+      const abortClassification = abortState.classifyError(error);
+
+      if (abortClassification === "timeout") {
         return buildProviderFailure(
           "timeout",
           "openai_generation_timeout",
           "OpenAI image generation timed out before returning an image.",
+          true,
+        );
+      }
+
+      if (abortClassification === "interrupted") {
+        return buildProviderFailure(
+          "interrupted",
+          "openai_generation_interrupted",
+          "The generation request was interrupted before OpenAI returned an image.",
           true,
         );
       }
@@ -185,60 +299,8 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
         error instanceof Error ? error.message : "OpenAI image generation failed before a response was returned.",
         true,
       );
+    } finally {
+      abortState.cleanup();
     }
-
-    if (!response.ok) {
-      const errorPayload = await parseJsonResponse<OpenAiErrorResponse>(response);
-      const resolvedFailure = resolveFailureKind(response, errorPayload);
-
-      return buildProviderFailure(
-        resolvedFailure.kind,
-        errorPayload?.error?.code || `openai_http_${response.status}`,
-        errorPayload?.error?.message || `OpenAI image generation failed with status ${response.status}.`,
-        resolvedFailure.retryable,
-      );
-    }
-
-    const payload = await parseJsonResponse<OpenAiImageGenerationResponse>(response);
-    const firstImage = payload?.data?.[0];
-
-    if (!firstImage?.b64_json) {
-      return buildProviderFailure(
-        "technical_failure",
-        "openai_missing_image_data",
-        "OpenAI returned a successful response without image data.",
-        true,
-      );
-    }
-
-    const assetKey = buildGeneratedOutputAssetKey({
-      providerId: this.providerId,
-      levelId: request.context.levelId,
-      attemptId: request.context.attemptId,
-    });
-
-    try {
-      await persistGeneratedOutput({
-        assetKey,
-        imageBase64: firstImage.b64_json,
-      });
-    } catch (error) {
-      return buildProviderFailure(
-        "technical_failure",
-        "generated_output_persist_failed",
-        error instanceof Error
-          ? `Generated image could not be persisted at ${assetKey}: ${error.message}`
-          : `Generated image could not be persisted at ${assetKey}.`,
-        true,
-      );
-    }
-
-    return {
-      ok: true,
-      assetKey,
-      createdAt: toIsoDateTime(payload?.created),
-      provider: this.modelRef,
-      revisedPrompt: firstImage.revised_prompt ?? null,
-    };
   }
 }

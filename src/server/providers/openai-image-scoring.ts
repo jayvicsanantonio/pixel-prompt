@@ -1,5 +1,6 @@
 import { SCORE_BREAKDOWN_DIMENSIONS, type AttemptScore } from "@/lib/game";
 
+import { createProviderAbortState } from "./abort";
 import { readGeneratedOutput } from "./generated-output-store";
 import { readTargetAsset } from "./target-asset-store";
 import type {
@@ -75,24 +76,9 @@ interface ScoringResponsePayload {
   breakdown: Record<(typeof SCORE_BREAKDOWN_DIMENSIONS)[number], number>;
 }
 
-function getAbortSignal(timeoutMs: number) {
-  if (typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(timeoutMs);
-  }
-
-  return undefined;
-}
-
-function isTimedAbort(error: unknown, signal?: AbortSignal) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  if (error.name === "TimeoutError") {
-    return true;
-  }
-
-  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
+interface ParsedJsonResponse<T> {
+  failure?: ProviderFailure;
+  payload: T | null;
 }
 
 function buildProviderFailure(
@@ -144,11 +130,38 @@ function resolveFailureKind(status: number, payload?: OpenAiResponsesPayload | n
   };
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T | null> {
+async function parseJsonResponseWithAbortHandling<T>(input: {
+  abortState: ReturnType<typeof createProviderAbortState>;
+  interruptedCode: string;
+  interruptedMessage: string;
+  response: Response;
+  timeoutCode: string;
+  timeoutMessage: string;
+}): Promise<ParsedJsonResponse<T>> {
   try {
-    return (await response.json()) as T;
-  } catch {
-    return null;
+    return {
+      payload: (await input.response.json()) as T,
+    };
+  } catch (error) {
+    const abortClassification = input.abortState.classifyError(error);
+
+    if (abortClassification === "timeout") {
+      return {
+        failure: buildProviderFailure("timeout", input.timeoutCode, input.timeoutMessage, true),
+        payload: null,
+      };
+    }
+
+    if (abortClassification === "interrupted") {
+      return {
+        failure: buildProviderFailure("interrupted", input.interruptedCode, input.interruptedMessage, true),
+        payload: null,
+      };
+    }
+
+    return {
+      payload: null,
+    };
   }
 }
 
@@ -257,6 +270,15 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
   }
 
   async scoreImageMatch(request: ImageScoringRequest): Promise<ImageScoringResult> {
+    if (request.signal?.aborted) {
+      return buildProviderFailure(
+        "interrupted",
+        "openai_scoring_interrupted",
+        "The scoring request was interrupted before OpenAI returned a score.",
+        true,
+      );
+    }
+
     let generatedImage: Buffer;
     let targetImage: Buffer;
 
@@ -274,11 +296,15 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
       );
     }
 
-    let response: Response;
-    const signal = getAbortSignal(this.timeoutMs);
+    const abortState = createProviderAbortState({
+      requestSignal: request.signal,
+      timeoutMs: this.timeoutMs,
+      timeoutMessage: "OpenAI image scoring timed out before returning a score.",
+      interruptedMessage: "The scoring request was interrupted before OpenAI returned a score.",
+    });
 
     try {
-      response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
+      const response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.apiKey}`,
@@ -316,14 +342,80 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
             },
           },
         }),
-        signal,
+        signal: abortState.signal,
       });
+      const { failure, payload } = await parseJsonResponseWithAbortHandling<OpenAiResponsesPayload>({
+        abortState,
+        interruptedCode: "openai_scoring_interrupted",
+        interruptedMessage: "The scoring request was interrupted before OpenAI returned a score.",
+        response,
+        timeoutCode: "openai_scoring_timeout",
+        timeoutMessage: "OpenAI image scoring timed out before returning a score.",
+      });
+
+      if (failure) {
+        return failure;
+      }
+
+      if (!response.ok) {
+        const resolvedFailure = resolveFailureKind(response.status, payload);
+
+        return buildProviderFailure(
+          resolvedFailure.kind,
+          payload?.error?.code || `openai_http_${response.status}`,
+          payload?.error?.message || `OpenAI image scoring failed with status ${response.status}.`,
+          resolvedFailure.retryable,
+        );
+      }
+
+      const outputText = extractOutputText(payload);
+
+      if (!outputText) {
+        return buildProviderFailure(
+          "technical_failure",
+          "openai_scoring_missing_output",
+          "OpenAI returned a scoring response without structured output text.",
+          true,
+        );
+      }
+
+      let parsedPayload: ScoringResponsePayload;
+
+      try {
+        parsedPayload = JSON.parse(outputText) as ScoringResponsePayload;
+      } catch {
+        return buildProviderFailure(
+          "technical_failure",
+          "openai_scoring_invalid_json",
+          "OpenAI returned a scoring response that was not valid JSON.",
+          true,
+        );
+      }
+
+      return {
+        ok: true,
+        createdAt: new Date().toISOString(),
+        provider: this.modelRef,
+        score: normalizeScorePayload(parsedPayload, request, this.modelRef),
+        reasoning: parsedPayload.reasoning,
+      };
     } catch (error) {
-      if (isTimedAbort(error, signal)) {
+      const abortClassification = abortState.classifyError(error);
+
+      if (abortClassification === "timeout") {
         return buildProviderFailure(
           "timeout",
           "openai_scoring_timeout",
           "OpenAI image scoring timed out before returning a score.",
+          true,
+        );
+      }
+
+      if (abortClassification === "interrupted") {
+        return buildProviderFailure(
+          "interrupted",
+          "openai_scoring_interrupted",
+          "The scoring request was interrupted before OpenAI returned a score.",
           true,
         );
       }
@@ -334,51 +426,8 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
         error instanceof Error ? error.message : "OpenAI image scoring failed before a response was returned.",
         true,
       );
+    } finally {
+      abortState.cleanup();
     }
-
-    const payload = await parseJsonResponse<OpenAiResponsesPayload>(response);
-
-    if (!response.ok) {
-      const resolvedFailure = resolveFailureKind(response.status, payload);
-
-      return buildProviderFailure(
-        resolvedFailure.kind,
-        payload?.error?.code || `openai_http_${response.status}`,
-        payload?.error?.message || `OpenAI image scoring failed with status ${response.status}.`,
-        resolvedFailure.retryable,
-      );
-    }
-
-    const outputText = extractOutputText(payload);
-
-    if (!outputText) {
-      return buildProviderFailure(
-        "technical_failure",
-        "openai_scoring_missing_output",
-        "OpenAI returned a scoring response without structured output text.",
-        true,
-      );
-    }
-
-    let parsedPayload: ScoringResponsePayload;
-
-    try {
-      parsedPayload = JSON.parse(outputText) as ScoringResponsePayload;
-    } catch {
-      return buildProviderFailure(
-        "technical_failure",
-        "openai_scoring_invalid_json",
-        "OpenAI returned a scoring response that was not valid JSON.",
-        true,
-      );
-    }
-
-    return {
-      ok: true,
-      createdAt: new Date().toISOString(),
-      provider: this.modelRef,
-      score: normalizeScorePayload(parsedPayload, request, this.modelRef),
-      reasoning: parsedPayload.reasoning,
-    };
   }
 }

@@ -8,6 +8,12 @@ describe("seeded tip rules", () => {
     expect(new Set(tipRules.map((rule) => rule.dimension))).toEqual(new Set(SCORE_BREAKDOWN_DIMENSIONS));
   });
 
+  it("keeps the seeded heuristics available from the first scored retry onward", () => {
+    expect(
+      tipRules.every((rule) => rule.when.minAttemptNumber === undefined || rule.when.minAttemptNumber === 1),
+    ).toBe(true);
+  });
+
   it("ships audience-specific variants for themed content where needed", () => {
     expect(tipRules).toEqual(
       expect.arrayContaining([

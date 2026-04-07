@@ -116,6 +116,7 @@ async function evaluateSubmissionWithProviders(input: {
   attemptId: string;
   attemptNumber: number;
   promptText: string;
+  requestSignal?: AbortSignal;
   runId: string;
 }) {
   const generationProvider = getImageGenerationProvider();
@@ -129,6 +130,7 @@ async function evaluateSubmissionWithProviders(input: {
       attemptId: input.attemptId,
       attemptNumber: input.attemptNumber,
     },
+    signal: input.requestSignal,
   });
   const generationDurationMs = Date.now() - generationStartedAt;
   const scoringStartedAt = Date.now();
@@ -145,6 +147,7 @@ async function evaluateSubmissionWithProviders(input: {
             attemptId: input.attemptId,
             attemptNumber: input.attemptNumber,
           },
+          signal: input.requestSignal,
         })
       : null;
   const scoringDurationMs = generationResult.ok ? Date.now() - scoringStartedAt : 0;
@@ -523,6 +526,7 @@ export async function handleSubmitAttempt(request: Request) {
         attemptId: preparation.attemptId,
         attemptNumber: preparation.attemptNumber,
         promptText: trimmedPrompt,
+        requestSignal: request.signal,
         runId: preparedSession.session.progress.runId,
       });
 

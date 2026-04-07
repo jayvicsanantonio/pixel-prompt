@@ -92,4 +92,27 @@ describe("session-persistence", () => {
       "The first attempt matched the still life subject but missed the composition.",
     );
   });
+
+  it("restores the persisted provider failure kind into attempt results", () => {
+    const attempts = buildPersistedAttempts([
+      createPersistedAttemptRow({
+        id: "attempt-interrupted",
+        lifecycleStatus: "technical_failure",
+        outcome: "error",
+        consumedAttempt: false,
+        scoreRaw: null,
+        scoreNormalized: null,
+        scoreThreshold: null,
+        scorePassed: null,
+        scoreBreakdown: null,
+        scoringProvider: null,
+        scoringModel: null,
+        scoredAt: null,
+        providerFailureKind: "interrupted",
+        errorCode: "openai_generation_interrupted",
+      }),
+    ]);
+
+    expect(attempts[0]?.result.failureKind).toBe("interrupted");
+  });
 });

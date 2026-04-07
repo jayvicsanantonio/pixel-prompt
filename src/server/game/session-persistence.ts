@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 
 import { levels as defaultLevels } from "@/content";
-import type { AttemptResult, AttemptScore, Level, LevelAttempt, LevelProgress } from "@/lib/game";
+import type { AttemptFailureKind, AttemptResult, AttemptScore, Level, LevelAttempt, LevelProgress } from "@/lib/game";
 import { anonymousPlayers, gameRuns, getDatabase, hasDatabaseUrl, levelAttempts, runLevelProgress } from "@/server/db";
 import type { GameSessionSnapshot } from "./session-state";
 
@@ -62,20 +62,50 @@ function getRunStatus(session: GameSessionSnapshot) {
   return session.progress.currentLevelId === null ? "completed" : "active";
 }
 
-function mapFailureKind(result: AttemptResult) {
-  if (result.status === "content_policy_rejected") {
+function inferFailureKind(input: {
+  errorCode?: string | null;
+  failureKind?: AttemptFailureKind | null;
+  status: AttemptResult["status"];
+}) {
+  if (input.failureKind) {
+    return input.failureKind;
+  }
+
+  if (input.status === "content_policy_rejected") {
     return "content_policy_rejection" as const;
   }
 
-  if (result.status !== "technical_failure") {
+  if (input.status !== "technical_failure") {
     return null;
   }
 
-  if (result.errorCode?.includes("timeout")) {
+  const normalizedErrorCode = input.errorCode?.toLowerCase() ?? "";
+
+  if (normalizedErrorCode.includes("rate_limit") || normalizedErrorCode.includes("429")) {
+    return "rate_limited" as const;
+  }
+
+  if (normalizedErrorCode.includes("timeout")) {
     return "timeout" as const;
   }
 
+  if (normalizedErrorCode.includes("interrupt")) {
+    return "interrupted" as const;
+  }
+
+  if (normalizedErrorCode.includes("asset")) {
+    return "asset_unavailable" as const;
+  }
+
   return "technical_failure" as const;
+}
+
+function mapFailureKind(result: AttemptResult) {
+  return inferFailureKind({
+    status: result.status,
+    errorCode: result.errorCode,
+    failureKind: result.failureKind,
+  });
 }
 
 function mapAttemptScore(score?: AttemptScore) {
@@ -131,6 +161,12 @@ function buildAttemptResult(attempt: typeof levelAttempts.$inferSelect, stronges
     status: attempt.lifecycleStatus,
     outcome:
       attempt.outcome ?? (attempt.lifecycleStatus === "content_policy_rejected" ? "rejected" : "error"),
+    failureKind:
+      inferFailureKind({
+        status: attempt.lifecycleStatus,
+        errorCode: attempt.errorCode,
+        failureKind: attempt.providerFailureKind,
+      }) ?? undefined,
     score,
     strongestAttemptScore,
     tipIds: attempt.tipIds ?? [],

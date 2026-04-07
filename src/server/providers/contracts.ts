@@ -1,12 +1,6 @@
-import type { AttemptId, AttemptScore, GameRunId, IsoDateTime, Level, LevelId } from "@/lib/game";
+import type { AttemptFailureKind, AttemptId, AttemptScore, GameRunId, IsoDateTime, Level, LevelId } from "@/lib/game";
 
-export type ProviderFailureKind =
-  | "content_policy_rejection"
-  | "rate_limited"
-  | "timeout"
-  | "interrupted"
-  | "technical_failure"
-  | "asset_unavailable";
+export type ProviderFailureKind = AttemptFailureKind;
 
 export interface ProviderModelRef {
   provider: string;
@@ -33,6 +27,7 @@ export interface ProviderFailure {
 export interface ImageGenerationRequest {
   prompt: string;
   context: ProviderAttemptContext;
+  signal?: AbortSignal;
 }
 
 export interface ImageGenerationSuccess {
@@ -52,6 +47,7 @@ export interface ImageScoringRequest {
   targetImage: Level["targetImage"];
   threshold: Level["threshold"];
   context: ProviderAttemptContext;
+  signal?: AbortSignal;
 }
 
 export interface ImageScoringSuccess {

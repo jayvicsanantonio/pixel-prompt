@@ -1,22 +1,31 @@
 import { buildGeneratedOutputAssetKey, persistGeneratedOutput } from "./generated-output-store";
 import type { ImageGenerationProvider, ImageGenerationRequest, ImageGenerationResult, ProviderModelRef } from "./contracts";
+import { MOCK_IMAGE_PNG_BASE64, MOCK_PROVIDER_PROMPT_MARKERS } from "./mock-fixtures";
 
 const MOCK_IMAGE_MODEL: ProviderModelRef = {
   provider: "mock",
   model: "local-generation-fixture-v1",
 };
 
-const ONE_PIXEL_PNG_BASE64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9Wn2X2QAAAAASUVORK5CYII=";
-
 export class MockImageGenerationProvider implements ImageGenerationProvider {
   readonly providerId = "mock";
   readonly modelRef = MOCK_IMAGE_MODEL;
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
+    if (request.signal?.aborted) {
+      return {
+        ok: false,
+        kind: "interrupted",
+        code: "mock_generation_interrupted",
+        message: "The mock generation fixture was interrupted before returning an image.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
+
     const normalizedPrompt = request.prompt.toLowerCase();
 
-    if (normalizedPrompt.includes("#policy")) {
+    if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationContentPolicy)) {
       return {
         ok: false,
         kind: "content_policy_rejection",
@@ -27,12 +36,23 @@ export class MockImageGenerationProvider implements ImageGenerationProvider {
       };
     }
 
-    if (normalizedPrompt.includes("#timeout")) {
+    if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.timeout)) {
       return {
         ok: false,
         kind: "timeout",
         code: "mock_generation_timeout",
         message: "The mock generation fixture timed out before returning an image.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
+
+    if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.interrupted)) {
+      return {
+        ok: false,
+        kind: "interrupted",
+        code: "mock_generation_interrupted",
+        message: "The mock generation fixture was interrupted before returning an image.",
         retryable: true,
         consumeAttempt: false,
       };
@@ -47,7 +67,7 @@ export class MockImageGenerationProvider implements ImageGenerationProvider {
     try {
       await persistGeneratedOutput({
         assetKey,
-        imageBase64: ONE_PIXEL_PNG_BASE64,
+        imageBase64: MOCK_IMAGE_PNG_BASE64,
       });
     } catch (error) {
       return {

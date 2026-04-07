@@ -1,5 +1,6 @@
 import type { AttemptGenerationDetails, AttemptResult, AttemptScore, Level } from "@/lib/game";
 import type { ProviderFailure } from "@/server/providers";
+import { MOCK_PROVIDER_PROMPT_MARKERS } from "@/server/providers/mock-fixtures";
 
 interface EvaluatedAttempt {
   generation: AttemptGenerationDetails;
@@ -58,6 +59,7 @@ export function mapProviderFailureToAttemptResult(failure: ProviderFailure): Att
     return {
       status: "content_policy_rejected",
       outcome: "rejected",
+      failureKind: failure.kind,
       tipIds: [],
       errorCode: failure.code,
       errorMessage: failure.message,
@@ -67,6 +69,7 @@ export function mapProviderFailureToAttemptResult(failure: ProviderFailure): Att
   return {
     status: "technical_failure",
     outcome: "error",
+    failureKind: failure.kind,
     tipIds: [],
     errorCode: failure.code,
     errorMessage: failure.message,
@@ -78,7 +81,7 @@ export const mapGenerationFailureToAttemptResult = mapProviderFailureToAttemptRe
 export function evaluateMockAttempt(level: Level, promptText: string, attemptId: string): EvaluatedAttempt {
   const normalizedPrompt = promptText.toLowerCase();
 
-  if (normalizedPrompt.includes("#policy")) {
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationContentPolicy)) {
     return {
       generation: {
         provider: "mock",
@@ -87,6 +90,7 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
       result: {
         status: "content_policy_rejected",
         outcome: "rejected",
+        failureKind: "content_policy_rejection",
         tipIds: [],
         errorCode: "mock_policy_rejection",
         errorMessage: "The prompt was rejected by the mock content-policy fixture.",
@@ -94,7 +98,7 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
     };
   }
 
-  if (normalizedPrompt.includes("#timeout")) {
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.timeout)) {
     return {
       generation: {
         provider: "mock",
@@ -103,9 +107,27 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
       result: {
         status: "technical_failure",
         outcome: "error",
+        failureKind: "timeout",
         tipIds: [],
         errorCode: "mock_generation_timeout",
         errorMessage: "The mock generation fixture timed out before returning an image.",
+      },
+    };
+  }
+
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.interrupted)) {
+    return {
+      generation: {
+        provider: "mock",
+        model: "local-generation-fixture-v1",
+      },
+      result: {
+        status: "technical_failure",
+        outcome: "error",
+        failureKind: "interrupted",
+        tipIds: [],
+        errorCode: "mock_generation_interrupted",
+        errorMessage: "The mock generation fixture was interrupted before returning an image.",
       },
     };
   }
