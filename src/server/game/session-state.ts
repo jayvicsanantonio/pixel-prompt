@@ -1,4 +1,4 @@
-import { levels as defaultLevels } from "@/content";
+import { levels as defaultLevels, uiCopy } from "@/content";
 import type {
   AnonymousPlayerId,
   AttemptGenerationDetails,
@@ -202,7 +202,7 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
         levelsCleared: 0,
         attemptsRemaining: 0,
         bestScore: null,
-        helperText: "Resume appears here after your first scored attempt.",
+        helperText: uiCopy.landing.resume.unavailableHelper,
       },
     };
   }
@@ -215,10 +215,10 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
   const bestScore = currentLevelProgress?.bestScore ?? (levelScores.length > 0 ? Math.max(...levelScores) : 0);
   const helperText =
     currentLevel && currentLevelProgress?.status === "failed"
-      ? "Jump back into the failed level with a fresh attempt cycle when you're ready."
+      ? uiCopy.landing.resume.failedHelper
       : currentLevel
-        ? "Pick up the same run without replaying cleared progress."
-        : "Replay any cleared level without losing your unlocked progress.";
+        ? uiCopy.landing.resume.inProgressHelper
+        : uiCopy.landing.resume.replayHelper;
 
   if (!currentLevel || !currentLevelProgress || bestScore == null) {
     return {
@@ -231,7 +231,7 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
         levelsCleared,
         attemptsRemaining: 0,
         bestScore: null,
-        helperText: "Resume appears here after your first scored attempt.",
+        helperText: uiCopy.landing.resume.unavailableHelper,
       },
     };
   }

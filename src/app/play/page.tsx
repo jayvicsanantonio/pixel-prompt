@@ -15,5 +15,11 @@ export default async function PlayPage(props: PageProps<"/play">) {
     resume: getSingleQueryValue(searchParams.resume) === "1",
   });
 
-  return <ActiveLevelScreen key={`${state.level.id}:${state.promptDraft}`} state={state} />;
+  return (
+    <ActiveLevelScreen
+      key={`${state.level.id}:${state.promptDraft}`}
+      state={state}
+      submissionEndpoint="/api/game/submit-attempt"
+    />
+  );
 }

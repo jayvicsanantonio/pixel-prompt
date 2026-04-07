@@ -2,12 +2,31 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { toPlayerFacingScore, type ActiveLevelScreenState } from "@/lib/game";
+import { levels, tipRules, uiCopy } from "@/content";
+import { toPlayerFacingScore, type ActiveLevelScreenState, type GameProgress, type LandingExperienceState, type Level, type LevelAttempt } from "@/lib/game";
 import styles from "./active-level-screen.module.css";
 
 interface ActiveLevelScreenProps {
   state: ActiveLevelScreenState;
+  submissionEndpoint?: string;
 }
+
+interface SubmitAttemptSuccessResponse {
+  ok: true;
+  transition: "retry" | "passed" | "failed" | "rejected" | "error" | "completed";
+  attempt: LevelAttempt;
+  currentLevel: Level | null;
+  landing: LandingExperienceState;
+  progress: GameProgress;
+}
+
+interface SubmitAttemptErrorResponse {
+  ok: false;
+  code: string;
+  message: string;
+}
+
+const tipRuleBodies = new Map(tipRules.map((tipRule) => [tipRule.id, tipRule.body]));
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -18,14 +37,137 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
-export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
-  const [promptText, setPromptText] = useState(state.promptDraft);
+function getLevelProgress(progress: GameProgress, levelId: string) {
+  return progress.levels.find((levelProgress) => levelProgress.levelId === levelId) ?? null;
+}
+
+function getFirstTipBody(tipIds: string[]) {
+  for (const tipId of tipIds) {
+    const body = tipRuleBodies.get(tipId);
+
+    if (body) {
+      return body;
+    }
+  }
+
+  return null;
+}
+
+function buildLiveSummaryPreview(progress: GameProgress) {
+  const levelSummaries = levels.map((level) => {
+    const levelProgress = getLevelProgress(progress, level.id);
+
+    return {
+      levelId: level.id,
+      levelNumber: level.number,
+      levelTitle: level.title,
+      bestScore: levelProgress?.bestScore ?? 0,
+      attemptsUsed: levelProgress?.attemptsUsed ?? 0,
+      replayHref: `/play?level=${level.number}`,
+    };
+  });
+
+  const completedLevels = levelSummaries.filter((levelSummary) => levelSummary.bestScore > 0);
+  const firstCompletedLevel = completedLevels[0] ?? null;
+  const lastCompletedLevel = completedLevels[completedLevels.length - 1] ?? null;
+  const improvementDelta =
+    firstCompletedLevel && lastCompletedLevel ? lastCompletedLevel.bestScore - firstCompletedLevel.bestScore : 0;
+  const improvementSummary =
+    firstCompletedLevel && lastCompletedLevel && completedLevels.length > 1
+      ? `You finished ${Math.abs(improvementDelta)} points ${
+          improvementDelta >= 0 ? "stronger" : "lower"
+        } on ${lastCompletedLevel.levelTitle} than on ${firstCompletedLevel.levelTitle}.`
+      : "You cleared the opening run. Replay a level to push the score higher.";
+
+  return {
+    levelsCompleted: progress.levels.filter((levelProgress) => levelProgress.completedAt != null).length,
+    totalAttemptsUsed: progress.totalAttemptsUsed,
+    bestScores: levelSummaries,
+    improvementDelta,
+    improvementSummary,
+    encouragement: uiCopy.gameplay.summary.encouragement,
+  };
+}
+
+function buildLiveFailureSummary(level: Level, attempt: LevelAttempt, progress: GameProgress) {
+  const tipBody = getFirstTipBody(attempt.result.tipIds);
+
+  if (tipBody) {
+    return tipBody;
+  }
+
+  const strongestAttemptScore = attempt.result.strongestAttemptScore ?? getLevelProgress(progress, level.id)?.bestScore ?? 0;
+
+  return `Best score ${strongestAttemptScore}% on Level ${level.number}. Restart and tighten the biggest visual differences.`;
+}
+
+function buildLiveResultSummary(level: Level, attempt: LevelAttempt) {
+  const score = attempt.result.score;
+
+  if (!score) {
+    return "The attempt could not be scored.";
+  }
+
+  if (score.passed) {
+    return `Score ${Math.round(score.normalized)}% cleared the ${level.threshold}% pass score.`;
+  }
+
+  return (
+    getFirstTipBody(attempt.result.tipIds) ??
+    `Score ${Math.round(score.normalized)}% missed the ${level.threshold}% pass score. Tighten the prompt and try again.`
+  );
+}
+
+function buildLiveScreenState(input: {
+  previousState: ActiveLevelScreenState;
+  transition: SubmitAttemptSuccessResponse["transition"];
+  attempt: LevelAttempt;
+  progress: GameProgress;
+  currentLevel: Level | null;
+}): ActiveLevelScreenState {
+  const attemptedLevel = levels.find((level) => level.id === input.attempt.levelId) ?? input.previousState.level;
+  const attemptedLevelProgress = getLevelProgress(input.progress, attemptedLevel.id);
+  const nextLevel =
+    input.transition === "passed" && input.currentLevel && input.currentLevel.id !== attemptedLevel.id ? input.currentLevel : null;
+  const strongestAttemptScore =
+    input.attempt.result.strongestAttemptScore ?? attemptedLevelProgress?.bestScore ?? input.previousState.failurePreview.strongestAttemptScore;
+
+  return {
+    level: attemptedLevel,
+    attemptsUsed: attemptedLevelProgress?.attemptsUsed ?? input.previousState.attemptsUsed,
+    attemptsRemaining: attemptedLevelProgress?.attemptsRemaining ?? input.previousState.attemptsRemaining,
+    promptDraft: input.attempt.promptText,
+    resultPreview: {
+      generatedImageAlt: "Generated image preview for the latest submitted prompt.",
+      score: input.attempt.result.score ?? input.previousState.resultPreview.score,
+      summary: buildLiveResultSummary(attemptedLevel, input.attempt),
+    },
+    continuation: {
+      attemptsRemainingAfterResult:
+        attemptedLevelProgress?.attemptsRemaining ?? input.previousState.continuation.attemptsRemainingAfterResult,
+      nextLevelHref: nextLevel ? `/play?level=${nextLevel.number}` : null,
+      nextLevelNumber: nextLevel?.number ?? null,
+      nextLevelTitle: nextLevel?.title ?? null,
+      restartLevelHref: `/play?level=${attemptedLevel.number}`,
+    },
+    failurePreview: {
+      strongestAttemptScore,
+      summary: buildLiveFailureSummary(attemptedLevel, input.attempt, input.progress),
+    },
+    summaryPreview: buildLiveSummaryPreview(input.progress),
+  };
+}
+
+export function ActiveLevelScreen({ state: initialState, submissionEndpoint }: ActiveLevelScreenProps) {
+  const [state, setState] = useState(initialState);
+  const [promptText, setPromptText] = useState(initialState.promptDraft);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [screenMode, setScreenMode] = useState<
     "active" | "generating" | "result" | "success" | "retry" | "failure" | "summary"
   >("active");
   const [isTargetExpanded, setIsTargetExpanded] = useState(false);
   const [submittedPrompt, setSubmittedPrompt] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inspectDialogRef = useRef<HTMLDivElement | null>(null);
   const inspectTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -112,7 +254,7 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
     };
   }, [isTargetExpanded]);
 
-  function submitPrompt() {
+  async function submitPrompt() {
     const trimmedPrompt = promptText.trim();
 
     if (trimmedPrompt.length === 0) {
@@ -127,7 +269,57 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
 
     setValidationMessage(null);
     setSubmittedPrompt(trimmedPrompt);
+
+    if (!submissionEndpoint) {
+      setScreenMode("generating");
+      return;
+    }
+
     setScreenMode("generating");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch(submissionEndpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          levelId: state.level.id,
+          promptText: trimmedPrompt,
+        }),
+      });
+      const body = (await response.json()) as SubmitAttemptSuccessResponse | SubmitAttemptErrorResponse;
+
+      if (!body.ok) {
+        setValidationMessage(body.message);
+        setScreenMode("active");
+        return;
+      }
+
+      if (!body.attempt.result.score) {
+        setValidationMessage(body.attempt.result.errorMessage ?? "The attempt could not be completed. Try again.");
+        setScreenMode("active");
+        return;
+      }
+
+      setState((previousState) =>
+        buildLiveScreenState({
+          previousState,
+          transition: body.transition,
+          attempt: body.attempt,
+          progress: body.progress,
+          currentLevel: body.currentLevel,
+        }),
+      );
+      setPromptText(trimmedPrompt);
+      setScreenMode("result");
+    } catch {
+      setValidationMessage("The attempt could not be submitted. Try again.");
+      setScreenMode("active");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function renderTargetStudyFrame(ariaLabel: string, expanded = false) {
@@ -156,38 +348,35 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
       <main className={styles.page}>
         <section className={`${styles.promptPanel} ${styles.summaryPanel}`.trim()}>
           <header className={styles.panelHeader}>
-            <p className={styles.eyebrow}>Run Complete</p>
-            <h1 className={styles.promptTitle}>You cleared the seeded pack</h1>
-            <p className={styles.promptBody}>
-              The final summary keeps the run easy to scan, then turns straight into replay entry points for every
-              cleared level.
-            </p>
+            <p className={styles.eyebrow}>{uiCopy.gameplay.summary.eyebrow}</p>
+            <h1 className={styles.promptTitle}>{uiCopy.gameplay.summary.title}</h1>
+            <p className={styles.promptBody}>{uiCopy.gameplay.summary.body}</p>
           </header>
 
           <article className={`${styles.scoreHero} ${styles.scoreHeroPass}`} role="status">
             <div>
-              <p className={styles.statLabel}>Pack Result</p>
+              <p className={styles.statLabel}>{uiCopy.gameplay.summary.packResult}</p>
               <p className={styles.scoreValue}>
                 {state.summaryPreview.levelsCompleted}/{state.summaryPreview.bestScores.length}
               </p>
             </div>
             <div className={styles.scoreMeta}>
-              <p className={styles.scoreHeadline}>All seeded levels cleared</p>
+              <p className={styles.scoreHeadline}>{uiCopy.gameplay.summary.headline}</p>
               <p className={styles.scoreSummary}>{state.summaryPreview.improvementSummary}</p>
             </div>
           </article>
 
           <div className={styles.statsGrid}>
             <article className={styles.statCard}>
-              <span className={styles.statLabel}>Levels Cleared</span>
+              <span className={styles.statLabel}>{uiCopy.gameplay.summary.levelsCleared}</span>
               <strong className={styles.statValue}>{state.summaryPreview.levelsCompleted}</strong>
             </article>
             <article className={styles.statCard}>
-              <span className={styles.statLabel}>Total Attempts</span>
+              <span className={styles.statLabel}>{uiCopy.gameplay.summary.totalAttempts}</span>
               <strong className={styles.statValue}>{state.summaryPreview.totalAttemptsUsed}</strong>
             </article>
             <article className={styles.statCard}>
-              <span className={styles.statLabel}>Improvement Trend</span>
+              <span className={styles.statLabel}>{uiCopy.gameplay.summary.improvementTrend}</span>
               <strong className={styles.statValue}>{summaryImprovementLabel}</strong>
             </article>
           </div>
@@ -195,10 +384,10 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
           <section className={styles.resultPanel}>
             <div className={styles.resultPanelHeader}>
               <div>
-                <p className={styles.eyebrow}>Replay Entry Points</p>
-                <h2 className={styles.resultPanelTitle}>Best scores by cleared level</h2>
+                <p className={styles.eyebrow}>{uiCopy.gameplay.summary.replayEyebrow}</p>
+                <h2 className={styles.resultPanelTitle}>{uiCopy.gameplay.summary.replayTitle}</h2>
               </div>
-              <p className={styles.helperText}>A finished run should still lead somewhere useful instead of dead-ending.</p>
+              <p className={styles.helperText}>{uiCopy.gameplay.summary.replayHelper}</p>
             </div>
 
             <div className={styles.summaryGrid}>
@@ -207,11 +396,10 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
                   <p className={styles.statLabel}>Level {levelSummary.levelNumber}</p>
                   <h3 className={styles.summaryTitle}>{levelSummary.levelTitle}</h3>
                   <p className={styles.summaryMeta}>
-                    Best score {levelSummary.bestScore}% in {levelSummary.attemptsUsed} scored{" "}
-                    {levelSummary.attemptsUsed === 1 ? "attempt" : "attempts"}.
+                    {uiCopy.gameplay.summary.buildReplayMeta(levelSummary.bestScore, levelSummary.attemptsUsed)}
                   </p>
                   <a className={styles.secondaryButton} href={levelSummary.replayHref}>
-                    Replay Level {levelSummary.levelNumber}
+                    {uiCopy.gameplay.summary.buildReplayCta(levelSummary.levelNumber)}
                   </a>
                 </article>
               ))}
@@ -219,18 +407,18 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
           </section>
 
           <article className={`${styles.feedback} ${styles.success}`}>
-            <p className={styles.statLabel}>Next Return</p>
+            <p className={styles.statLabel}>{uiCopy.gameplay.summary.nextReturn}</p>
             <p className={styles.submittedPrompt}>{state.summaryPreview.encouragement}</p>
           </article>
 
           <div className={styles.actionRow}>
             {finalReplayLevel ? (
               <a className={styles.button} href={finalReplayLevel.replayHref}>
-                Replay Final Level
+                {uiCopy.gameplay.summary.replayFinalCta}
               </a>
             ) : null}
             <Link className={styles.secondaryButton} href="/">
-              Back to Landing
+              {uiCopy.gameplay.summary.backCta}
             </Link>
           </div>
         </section>
@@ -367,14 +555,22 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
             currently being matched.
           </p>
 
-          <div className={styles.actionRow}>
-            <button className={styles.button} type="button" onClick={() => setScreenMode("result")}>
-              Reveal Mock Result
-            </button>
-            <button className={styles.secondaryButton} type="button" onClick={() => setScreenMode("active")}>
-              Back to Prompt
-            </button>
-          </div>
+          {submissionEndpoint ? (
+            <div className={styles.actionRow}>
+              <button className={styles.button} type="button" disabled={isSubmitting}>
+                {isSubmitting ? "Working..." : "Result incoming"}
+              </button>
+            </div>
+          ) : (
+            <div className={styles.actionRow}>
+              <button className={styles.button} type="button" onClick={() => setScreenMode("result")}>
+                Reveal Mock Result
+              </button>
+              <button className={styles.secondaryButton} type="button" onClick={() => setScreenMode("active")}>
+                Back to Prompt
+              </button>
+            </div>
+          )}
         </>
       );
     }
@@ -616,38 +812,33 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
     return (
       <>
         <header className={styles.panelHeader}>
-          <p className={styles.eyebrow}>Level Failed</p>
-          <h2 className={styles.promptTitle}>You ran out of attempts, but the best try is still visible</h2>
-          <p className={styles.promptBody}>
-            The failure state should surface the strongest attempt without sounding punitive, then offer a clean
-            restart that resets the local mock state.
-          </p>
+          <p className={styles.eyebrow}>{uiCopy.gameplay.failure.eyebrow}</p>
+          <h2 className={styles.promptTitle}>{uiCopy.gameplay.failure.title}</h2>
+          <p className={styles.promptBody}>{uiCopy.gameplay.failure.body}</p>
         </header>
 
         <article className={`${styles.scoreHero} ${styles.scoreHeroFail}`} role="status">
           <div>
-            <p className={styles.statLabel}>Strongest Attempt</p>
+            <p className={styles.statLabel}>{uiCopy.gameplay.failure.strongestAttempt}</p>
             <p className={styles.scoreValue}>{state.failurePreview.strongestAttemptScore}%</p>
           </div>
           <div className={styles.scoreMeta}>
-            <p className={styles.scoreHeadline}>Closest run fell just short</p>
-            <p className={styles.scoreSummary}>
-              Keep the best score visible so a restart feels like a reset, not a punishment.
-            </p>
+            <p className={styles.scoreHeadline}>{uiCopy.gameplay.failure.headline}</p>
+            <p className={styles.scoreSummary}>{uiCopy.gameplay.failure.summary}</p>
           </div>
         </article>
 
         <div className={styles.statsGrid}>
           <article className={styles.statCard}>
-            <span className={styles.statLabel}>Threshold</span>
+            <span className={styles.statLabel}>{uiCopy.gameplay.failure.threshold}</span>
             <strong className={styles.statValue}>{playerFacingScore.threshold}%</strong>
           </article>
           <article className={styles.statCard}>
-            <span className={styles.statLabel}>Last Result</span>
+            <span className={styles.statLabel}>{uiCopy.gameplay.failure.lastResult}</span>
             <strong className={styles.statValue}>{playerFacingScore.percentage}%</strong>
           </article>
           <article className={styles.statCard}>
-            <span className={styles.statLabel}>Attempts Left</span>
+            <span className={styles.statLabel}>{uiCopy.gameplay.failure.attemptsLeft}</span>
             <strong className={styles.statValue}>{state.continuation.attemptsRemainingAfterResult}</strong>
           </article>
         </div>
@@ -655,8 +846,8 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
         <section className={styles.resultPanel}>
           <div className={styles.resultPanelHeader}>
             <div>
-              <p className={styles.eyebrow}>Strongest Attempt Context</p>
-              <h3 className={styles.resultPanelTitle}>What to carry into the restart</h3>
+              <p className={styles.eyebrow}>{uiCopy.gameplay.failure.contextEyebrow}</p>
+              <h3 className={styles.resultPanelTitle}>{uiCopy.gameplay.failure.contextTitle}</h3>
             </div>
           </div>
 
@@ -670,10 +861,10 @@ export function ActiveLevelScreen({ state }: ActiveLevelScreenProps) {
 
         <div className={styles.actionRow}>
           <a className={styles.button} href={state.continuation.restartLevelHref}>
-            Restart Level
+            {uiCopy.gameplay.failure.restartCta}
           </a>
           <button className={styles.secondaryButton} type="button" onClick={() => setScreenMode("result")}>
-            Review Result Again
+            {uiCopy.gameplay.failure.reviewCta}
           </button>
         </div>
       </>
