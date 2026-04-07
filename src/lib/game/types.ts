@@ -6,6 +6,13 @@ export type AnonymousPlayerId = string;
 export type GameRunId = string;
 export type LevelId = string;
 export type AttemptId = string;
+export type AttemptFailureKind =
+  | "content_policy_rejection"
+  | "rate_limited"
+  | "timeout"
+  | "interrupted"
+  | "technical_failure"
+  | "asset_unavailable";
 
 export type LevelStatus = "locked" | "unlocked" | "in_progress" | "passed" | "failed";
 export type AttemptLifecycleStatus =
@@ -69,6 +76,7 @@ export interface AttemptScore {
 export interface AttemptResult {
   status: AttemptLifecycleStatus;
   outcome: AttemptOutcome;
+  failureKind?: AttemptFailureKind;
   score?: AttemptScore;
   strongestAttemptScore?: number | null;
   tipIds: string[];

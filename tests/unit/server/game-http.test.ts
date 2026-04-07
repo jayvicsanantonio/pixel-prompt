@@ -1,14 +1,12 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
+import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
 import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
-
-const onePixelPngBase64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9Wn2X2QAAAAASUVORK5CYII=";
 
 function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
@@ -45,8 +43,7 @@ describe("game http handlers", () => {
     process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = targetAssetDir;
     await rm(generatedOutputDir, { recursive: true, force: true });
     await rm(targetAssetDir, { recursive: true, force: true });
-    await mkdir(path.join(targetAssetDir, "targets"), { recursive: true });
-    await writeFile(path.join(targetAssetDir, "targets", "level-1.png"), Buffer.from(onePixelPngBase64, "base64"));
+    await seedMockTargetAssets(targetAssetDir, ["level-1"]);
     resetSessionStoreForTests();
   });
 
@@ -321,7 +318,7 @@ describe("game http handlers", () => {
           created: 1_775_529_600,
           data: [
             {
-              b64_json: onePixelPngBase64,
+              b64_json: MOCK_IMAGE_PNG_BASE64,
               revised_prompt: "refined still life prompt",
             },
           ],
@@ -373,7 +370,7 @@ describe("game http handlers", () => {
             created: 1_775_529_600,
             data: [
               {
-                b64_json: onePixelPngBase64,
+                b64_json: MOCK_IMAGE_PNG_BASE64,
                 revised_prompt: "refined still life prompt",
               },
             ],
@@ -463,6 +460,47 @@ describe("game http handlers", () => {
         result: {
           tipIds: ["tip-composition-specificity", "tip-context-specificity"],
         },
+      },
+    });
+  });
+
+  it("scores technically successful off-topic prompts as normal failed attempts", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "spaceship battle in deep space",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "retry",
+      attempt: {
+        consumedAttempt: true,
+        result: {
+          status: "scored",
+          outcome: "failed",
+          score: {
+            normalized: 35,
+            passed: false,
+            threshold: 50,
+          },
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 1,
       },
     });
   });
@@ -579,6 +617,87 @@ describe("game http handlers", () => {
         consumedAttempt: false,
         result: {
           status: "content_policy_rejected",
+          failureKind: "content_policy_rejection",
+          errorCode: "mock_policy_rejection",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
+  it("preserves attempts when scoring reports a content-policy rejection", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #score-policy",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "rejected",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        generation: {
+          assetKey: expect.stringContaining("generated/mock/level-1/"),
+        },
+        result: {
+          status: "content_policy_rejected",
+          failureKind: "content_policy_rejection",
+          errorCode: "mock_scoring_policy_rejection",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
+  it("preserves attempts when the mock provider reports an interrupted request", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #interrupt",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "error",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        result: {
+          status: "technical_failure",
+          failureKind: "interrupted",
+          errorCode: "mock_generation_interrupted",
         },
       },
       progress: {

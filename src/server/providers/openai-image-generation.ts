@@ -1,4 +1,5 @@
 import { buildGeneratedOutputAssetKey, persistGeneratedOutput } from "./generated-output-store";
+import { createProviderAbortState } from "./abort";
 import type {
   ImageGenerationProvider,
   ImageGenerationRequest,
@@ -33,26 +34,6 @@ interface OpenAiImageGenerationProviderOptions {
   model?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
-}
-
-function getAbortSignal(timeoutMs: number) {
-  if (typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(timeoutMs);
-  }
-
-  return undefined;
-}
-
-function isTimedAbort(error: unknown, signal?: AbortSignal) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  if (error.name === "TimeoutError") {
-    return true;
-  }
-
-  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 function toIsoDateTime(created?: number) {
@@ -153,8 +134,22 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
+    if (request.signal?.aborted) {
+      return buildProviderFailure(
+        "interrupted",
+        "openai_generation_interrupted",
+        "The generation request was interrupted before OpenAI returned an image.",
+        true,
+      );
+    }
+
     let response: Response;
-    const signal = getAbortSignal(this.timeoutMs);
+    const abortState = createProviderAbortState({
+      requestSignal: request.signal,
+      timeoutMs: this.timeoutMs,
+      timeoutMessage: "OpenAI image generation timed out before returning an image.",
+      interruptedMessage: "The generation request was interrupted before OpenAI returned an image.",
+    });
 
     try {
       response = await this.fetchImpl(OPENAI_IMAGE_GENERATIONS_URL, {
@@ -167,14 +162,25 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
           model: this.modelRef.model,
           prompt: request.prompt,
         }),
-        signal,
+        signal: abortState.signal,
       });
     } catch (error) {
-      if (isTimedAbort(error, signal)) {
+      const abortClassification = abortState.classifyError(error);
+
+      if (abortClassification === "timeout") {
         return buildProviderFailure(
           "timeout",
           "openai_generation_timeout",
           "OpenAI image generation timed out before returning an image.",
+          true,
+        );
+      }
+
+      if (abortClassification === "interrupted") {
+        return buildProviderFailure(
+          "interrupted",
+          "openai_generation_interrupted",
+          "The generation request was interrupted before OpenAI returned an image.",
           true,
         );
       }
@@ -185,6 +191,8 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
         error instanceof Error ? error.message : "OpenAI image generation failed before a response was returned.",
         true,
       );
+    } finally {
+      abortState.cleanup();
     }
 
     if (!response.ok) {

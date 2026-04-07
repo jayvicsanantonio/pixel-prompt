@@ -1,5 +1,6 @@
 import { SCORE_BREAKDOWN_DIMENSIONS, type AttemptScore } from "@/lib/game";
 
+import { createProviderAbortState } from "./abort";
 import { readGeneratedOutput } from "./generated-output-store";
 import { readTargetAsset } from "./target-asset-store";
 import type {
@@ -73,26 +74,6 @@ interface ScoringResponsePayload {
   normalizedScore: number;
   reasoning: string;
   breakdown: Record<(typeof SCORE_BREAKDOWN_DIMENSIONS)[number], number>;
-}
-
-function getAbortSignal(timeoutMs: number) {
-  if (typeof AbortSignal.timeout === "function") {
-    return AbortSignal.timeout(timeoutMs);
-  }
-
-  return undefined;
-}
-
-function isTimedAbort(error: unknown, signal?: AbortSignal) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  if (error.name === "TimeoutError") {
-    return true;
-  }
-
-  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 function buildProviderFailure(
@@ -257,6 +238,15 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
   }
 
   async scoreImageMatch(request: ImageScoringRequest): Promise<ImageScoringResult> {
+    if (request.signal?.aborted) {
+      return buildProviderFailure(
+        "interrupted",
+        "openai_scoring_interrupted",
+        "The scoring request was interrupted before OpenAI returned a score.",
+        true,
+      );
+    }
+
     let generatedImage: Buffer;
     let targetImage: Buffer;
 
@@ -275,7 +265,12 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
     }
 
     let response: Response;
-    const signal = getAbortSignal(this.timeoutMs);
+    const abortState = createProviderAbortState({
+      requestSignal: request.signal,
+      timeoutMs: this.timeoutMs,
+      timeoutMessage: "OpenAI image scoring timed out before returning a score.",
+      interruptedMessage: "The scoring request was interrupted before OpenAI returned a score.",
+    });
 
     try {
       response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
@@ -316,14 +311,25 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
             },
           },
         }),
-        signal,
+        signal: abortState.signal,
       });
     } catch (error) {
-      if (isTimedAbort(error, signal)) {
+      const abortClassification = abortState.classifyError(error);
+
+      if (abortClassification === "timeout") {
         return buildProviderFailure(
           "timeout",
           "openai_scoring_timeout",
           "OpenAI image scoring timed out before returning a score.",
+          true,
+        );
+      }
+
+      if (abortClassification === "interrupted") {
+        return buildProviderFailure(
+          "interrupted",
+          "openai_scoring_interrupted",
+          "The scoring request was interrupted before OpenAI returned a score.",
           true,
         );
       }
@@ -334,6 +340,8 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
         error instanceof Error ? error.message : "OpenAI image scoring failed before a response was returned.",
         true,
       );
+    } finally {
+      abortState.cleanup();
     }
 
     const payload = await parseJsonResponse<OpenAiResponsesPayload>(response);

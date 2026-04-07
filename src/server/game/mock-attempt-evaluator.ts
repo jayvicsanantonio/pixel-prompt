@@ -58,6 +58,7 @@ export function mapProviderFailureToAttemptResult(failure: ProviderFailure): Att
     return {
       status: "content_policy_rejected",
       outcome: "rejected",
+      failureKind: failure.kind,
       tipIds: [],
       errorCode: failure.code,
       errorMessage: failure.message,
@@ -67,6 +68,7 @@ export function mapProviderFailureToAttemptResult(failure: ProviderFailure): Att
   return {
     status: "technical_failure",
     outcome: "error",
+    failureKind: failure.kind,
     tipIds: [],
     errorCode: failure.code,
     errorMessage: failure.message,
@@ -87,6 +89,7 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
       result: {
         status: "content_policy_rejected",
         outcome: "rejected",
+        failureKind: "content_policy_rejection",
         tipIds: [],
         errorCode: "mock_policy_rejection",
         errorMessage: "The prompt was rejected by the mock content-policy fixture.",
@@ -103,9 +106,27 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
       result: {
         status: "technical_failure",
         outcome: "error",
+        failureKind: "timeout",
         tipIds: [],
         errorCode: "mock_generation_timeout",
         errorMessage: "The mock generation fixture timed out before returning an image.",
+      },
+    };
+  }
+
+  if (normalizedPrompt.includes("#interrupt")) {
+    return {
+      generation: {
+        provider: "mock",
+        model: "local-generation-fixture-v1",
+      },
+      result: {
+        status: "technical_failure",
+        outcome: "error",
+        failureKind: "interrupted",
+        tipIds: [],
+        errorCode: "mock_generation_interrupted",
+        errorMessage: "The mock generation fixture was interrupted before returning an image.",
       },
     };
   }

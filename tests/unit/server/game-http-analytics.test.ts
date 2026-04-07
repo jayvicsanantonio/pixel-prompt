@@ -160,6 +160,75 @@ describe("game http analytics", () => {
     ]);
   });
 
+  it("emits interrupted failure telemetry when a provider request is interrupted", async () => {
+    const sessionToken = await createSessionToken();
+
+    const response = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #interrupt",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
+    expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
+    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: "prompt_submitted",
+      }),
+      expect.objectContaining({
+        name: "generation_completed",
+        success: false,
+        failureKind: "interrupted",
+      }),
+    ]);
+  });
+
+  it("emits scoring rejection telemetry for content-policy failures after generation succeeds", async () => {
+    const sessionToken = await createSessionToken();
+
+    const response = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #score-policy",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
+    expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
+    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: "prompt_submitted",
+      }),
+      expect.objectContaining({
+        name: "generation_completed",
+        success: true,
+        failureKind: undefined,
+      }),
+      expect.objectContaining({
+        name: "scoring_completed",
+        success: false,
+        failureKind: "content_policy_rejection",
+      }),
+    ]);
+  });
+
   it("emits run completion on the final cleared level", async () => {
     const sessionToken = await createSessionToken();
 

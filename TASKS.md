@@ -419,16 +419,16 @@ Tasks for Agent 4:
 - [x] integrate one generation path (OpenAI image generation adapter wired into submit-attempt flow with persisted generated outputs and mock fallback in test/dev paths without credentials)
 - [x] integrate one scoring path (OpenAI Responses-based image scorer added behind explicit opt-in, with mock scoring preserved as the stable default until target-image assets and calibration are production-ready)
 - [x] define normalized score outputs and reasoning fields (provider outputs now clamp to the shared 0-100 contract, derive raw score from normalized score, and persist internal scoring reasoning without exposing it in the player-facing UI)
-- define interrupted-request signals and finish any remaining provider-failure edge-case cleanup
-- define content-policy rejection behavior and structured rejection payloads
-- create deterministic fixtures for scoring and integration tests
-- evaluate scoring consistency on visually acceptable matches
-- document expected scoring behavior for low-quality or off-topic provider outputs that are technically successful
+- [x] define interrupted-request signals and finish any remaining provider-failure edge-case cleanup (submit-attempt now propagates request abort signals into generation/scoring providers, interrupted failures persist as structured non-consuming results, and interrupted telemetry is covered in tests)
+- [x] define content-policy rejection behavior and structured rejection payloads (generation and scoring now share the same structured `content_policy_rejected` attempt shape with preserved failure kind/code/message, non-consuming transitions, and analytics coverage)
+- [x] create deterministic fixtures for scoring and integration tests (shared mock asset seeding and prompt markers now live in `src/server/providers/mock-fixtures.ts`, with provider and HTTP tests consuming the same deterministic fixtures)
+- [x] evaluate scoring consistency on visually acceptable matches (documented deterministic acceptable-match results in `docs/foundation/scoring-consistency-evaluation.md` and locked the fixture matrix in `tests/unit/server/mock-attempt-evaluator.test.ts`)
+- [x] document expected scoring behavior for low-quality or off-topic provider outputs that are technically successful (captured MVP rules and deterministic off-topic fixtures in `docs/foundation/scoring-consistency-evaluation.md`, with HTTP and scorer tests proving these outputs are still scored and consume attempts)
 
 Tasks for Agent 5:
 
-- create initial levels and threshold values with category, difficulty, and theme metadata
-- define first-pass retry tip heuristics across all PRD visual-detail categories
+- [x] create initial levels and threshold values with category, difficulty, and theme metadata (seeded levels already live in `src/content/levels/index.ts`; content tests now lock thresholds plus category/difficulty/theme metadata)
+- [x] define first-pass retry tip heuristics across all PRD visual-detail categories (seeded tip rules already cover every PRD breakdown dimension in `src/content/tips/index.ts`; tests now lock category coverage plus first-retry availability)
 - define analytics event dictionary mapped to the PRD metrics and acceptance checks
 - author QA matrix that enumerates all PRD edge cases and assigns ownership
 - define copy guidelines for short, concrete, beginner-friendly UX text

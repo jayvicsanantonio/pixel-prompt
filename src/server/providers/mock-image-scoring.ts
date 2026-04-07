@@ -2,6 +2,7 @@ import { levels } from "@/content";
 import { scorePromptAgainstLevel } from "@/server/game/mock-attempt-evaluator";
 
 import type { ImageScoringProvider, ImageScoringRequest, ImageScoringResult, ProviderModelRef } from "./contracts";
+import { MOCK_PROVIDER_PROMPT_MARKERS } from "./mock-fixtures";
 
 const MOCK_SCORING_MODEL: ProviderModelRef = {
   provider: "mock",
@@ -13,6 +14,28 @@ export class MockImageScoringProvider implements ImageScoringProvider {
   readonly modelRef = MOCK_SCORING_MODEL;
 
   async scoreImageMatch(request: ImageScoringRequest): Promise<ImageScoringResult> {
+    if (request.signal?.aborted) {
+      return {
+        ok: false,
+        kind: "interrupted",
+        code: "mock_scoring_interrupted",
+        message: "The mock scoring fixture was interrupted before returning a score.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
+
+    if (request.prompt.toLowerCase().includes(MOCK_PROVIDER_PROMPT_MARKERS.scoringContentPolicy)) {
+      return {
+        ok: false,
+        kind: "content_policy_rejection",
+        code: "mock_scoring_policy_rejection",
+        message: "The mock scoring fixture rejected the generated comparison for content-policy reasons.",
+        retryable: false,
+        consumeAttempt: false,
+      };
+    }
+
     const level = levels.find((candidate) => candidate.id === request.context.levelId);
 
     if (!level) {

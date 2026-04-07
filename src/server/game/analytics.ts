@@ -30,6 +30,10 @@ interface SubmitAttemptAnalyticsInput {
 }
 
 function mapProviderFailureKind(attempt: LevelAttempt): ProviderFailureKind | undefined {
+  if (attempt.result.failureKind) {
+    return attempt.result.failureKind;
+  }
+
   if (attempt.result.status === "content_policy_rejected") {
     return "content_policy_rejection";
   }

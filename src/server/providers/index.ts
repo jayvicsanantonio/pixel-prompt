@@ -2,6 +2,7 @@ export * from "./contracts";
 export * from "./generated-output-store";
 export * from "./image-generation";
 export * from "./image-scoring";
+export * from "./mock-fixtures";
 export * from "./mock-image-generation";
 export * from "./mock-image-scoring";
 export * from "./openai-image-generation";

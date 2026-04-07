@@ -149,6 +149,47 @@ describe("session-state", () => {
     });
   });
 
+  it("returns a rejected transition for content-policy failures without consuming attempts", () => {
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: startedAt,
+    });
+
+    const rejectedAttempt = recordAttempt({
+      session,
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "blocked prompt",
+      createdAt: "2026-04-04T00:05:00.000Z",
+      result: {
+        status: "content_policy_rejected",
+        outcome: "rejected",
+        failureKind: "content_policy_rejection",
+        tipIds: [],
+        errorCode: "mock_policy_rejection",
+        errorMessage: "The prompt was rejected by the mock content-policy fixture.",
+      },
+    });
+
+    expect(rejectedAttempt.transition).toBe("rejected");
+    expect(rejectedAttempt.attempt).toMatchObject({
+      attemptCycle: 1,
+      attemptNumber: 1,
+      consumedAttempt: false,
+      result: {
+        failureKind: "content_policy_rejection",
+      },
+    });
+    expect(rejectedAttempt.session.progress.totalAttemptsUsed).toBe(0);
+    expect(rejectedAttempt.session.progress.levels[0]).toMatchObject({
+      status: "in_progress",
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+      bestScore: null,
+    });
+  });
+
   it("unlocks the next level on first clear and preserves replay-safe progress after a replay run", () => {
     const session = createGameSession({
       playerId: "player-1",

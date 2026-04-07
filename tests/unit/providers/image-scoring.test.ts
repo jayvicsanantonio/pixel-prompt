@@ -1,17 +1,16 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  MOCK_IMAGE_PNG_BASE64,
   createMockImageScoringProvider,
   OpenAiImageScoringProvider,
   persistGeneratedOutput,
   readTargetAsset,
+  seedMockTargetAssets,
 } from "@/server/providers";
-
-const onePixelPngBase64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAukB9Wn2X2QAAAAASUVORK5CYII=";
 
 describe("image scoring providers", () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
@@ -27,8 +26,7 @@ describe("image scoring providers", () => {
     process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = targetAssetDir;
     await rm(generatedOutputDir, { recursive: true, force: true });
     await rm(targetAssetDir, { recursive: true, force: true });
-    await mkdir(path.join(targetAssetDir, "targets"), { recursive: true });
-    await writeFile(path.join(targetAssetDir, "targets", "level-1.png"), Buffer.from(onePixelPngBase64, "base64"));
+    await seedMockTargetAssets(targetAssetDir, ["level-1"]);
   });
 
   afterEach(async () => {
@@ -119,7 +117,7 @@ describe("image scoring providers", () => {
     process.env.OPENAI_API_KEY = "sk-test";
     await persistGeneratedOutput({
       assetKey: "generated/openai/level-1/attempt-1.png",
-      imageBase64: onePixelPngBase64,
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
     });
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
@@ -192,7 +190,7 @@ describe("image scoring providers", () => {
   it("clamps out-of-range OpenAI score fields into the shared normalized score contract", async () => {
     await persistGeneratedOutput({
       assetKey: "generated/openai/level-1/attempt-2.png",
-      imageBase64: onePixelPngBase64,
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
     });
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
@@ -262,7 +260,7 @@ describe("image scoring providers", () => {
   it("treats timeout errors as timeout failures", async () => {
     await persistGeneratedOutput({
       assetKey: "generated/openai/level-1/attempt-3.png",
-      imageBase64: onePixelPngBase64,
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
     });
     const provider = new OpenAiImageScoringProvider({
       apiKey: "sk-test",
@@ -290,6 +288,96 @@ describe("image scoring providers", () => {
       kind: "timeout",
       code: "openai_scoring_timeout",
       message: "OpenAI image scoring timed out before returning a score.",
+      retryable: true,
+      consumeAttempt: false,
+    });
+  });
+
+  it("maps OpenAI moderation failures to content-policy rejections", async () => {
+    await persistGeneratedOutput({
+      assetKey: "generated/openai/level-1/attempt-4.png",
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "content_policy_violation",
+            message: "The comparison request was rejected by safety policy.",
+            type: "invalid_request_error",
+          },
+        }),
+        {
+          status: 400,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const provider = new OpenAiImageScoringProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life #score-policy",
+      generatedImageAssetKey: "generated/openai/level-1/attempt-4.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-4",
+        attemptNumber: 4,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "content_policy_rejection",
+      code: "content_policy_violation",
+      message: "The comparison request was rejected by safety policy.",
+      retryable: false,
+      consumeAttempt: false,
+    });
+  });
+
+  it("maps aborted request signals to interrupted failures", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn();
+    const provider = new OpenAiImageScoringProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life of pears and a bottle on a wooden table",
+      generatedImageAssetKey: "generated/openai/level-1/attempt-4.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-5",
+        attemptNumber: 5,
+      },
+      signal: controller.signal,
+    });
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      ok: false,
+      kind: "interrupted",
+      code: "openai_scoring_interrupted",
+      message: "The scoring request was interrupted before OpenAI returned a score.",
       retryable: true,
       consumeAttempt: false,
     });
