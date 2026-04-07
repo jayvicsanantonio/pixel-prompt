@@ -1,5 +1,6 @@
 import type { AttemptGenerationDetails, AttemptResult, AttemptScore, Level } from "@/lib/game";
 import type { ProviderFailure } from "@/server/providers";
+import { MOCK_PROVIDER_PROMPT_MARKERS } from "@/server/providers/mock-fixtures";
 
 interface EvaluatedAttempt {
   generation: AttemptGenerationDetails;
@@ -80,7 +81,7 @@ export const mapGenerationFailureToAttemptResult = mapProviderFailureToAttemptRe
 export function evaluateMockAttempt(level: Level, promptText: string, attemptId: string): EvaluatedAttempt {
   const normalizedPrompt = promptText.toLowerCase();
 
-  if (normalizedPrompt.includes("#policy")) {
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationContentPolicy)) {
     return {
       generation: {
         provider: "mock",
@@ -97,7 +98,7 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
     };
   }
 
-  if (normalizedPrompt.includes("#timeout")) {
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.timeout)) {
     return {
       generation: {
         provider: "mock",
@@ -114,7 +115,7 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
     };
   }
 
-  if (normalizedPrompt.includes("#interrupt")) {
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.interrupted)) {
     return {
       generation: {
         provider: "mock",

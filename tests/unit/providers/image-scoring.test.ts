@@ -293,9 +293,66 @@ describe("image scoring providers", () => {
     });
   });
 
-  it("maps OpenAI moderation failures to content-policy rejections", async () => {
+  it("keeps timeout handling active while reading the scoring response body", async () => {
     await persistGeneratedOutput({
       assetKey: "generated/openai/level-1/attempt-4.png",
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
+    });
+    const fetchImpl = vi.fn().mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal;
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          await new Promise<never>((_resolve, reject) => {
+            const rejectWithAbortReason = () =>
+              reject(signal.reason ?? Object.assign(new Error("aborted"), { name: "AbortError" }));
+
+            if (signal.aborted) {
+              rejectWithAbortReason();
+              return;
+            }
+
+            signal.addEventListener("abort", rejectWithAbortReason, { once: true });
+          }),
+      } as unknown as Response;
+    });
+    const provider = new OpenAiImageScoringProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+      timeoutMs: 5,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life of pears and a bottle on a wooden table",
+      generatedImageAssetKey: "generated/openai/level-1/attempt-4.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-4",
+        attemptNumber: 4,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "timeout",
+      code: "openai_scoring_timeout",
+      message: "OpenAI image scoring timed out before returning a score.",
+      retryable: true,
+      consumeAttempt: false,
+    });
+  });
+
+  it("maps OpenAI moderation failures to content-policy rejections", async () => {
+    await persistGeneratedOutput({
+      assetKey: "generated/openai/level-1/attempt-5.png",
       imageBase64: MOCK_IMAGE_PNG_BASE64,
     });
     const fetchImpl = vi.fn().mockResolvedValue(
@@ -322,7 +379,7 @@ describe("image scoring providers", () => {
 
     const result = await provider.scoreImageMatch({
       prompt: "sunlit still life #score-policy",
-      generatedImageAssetKey: "generated/openai/level-1/attempt-4.png",
+      generatedImageAssetKey: "generated/openai/level-1/attempt-5.png",
       targetImage: {
         assetKey: "targets/level-1.png",
         alt: "A sunlit still life arranged on a wooden table.",
@@ -331,8 +388,8 @@ describe("image scoring providers", () => {
       context: {
         runId: "run-1",
         levelId: "level-1",
-        attemptId: "attempt-4",
-        attemptNumber: 4,
+        attemptId: "attempt-5",
+        attemptNumber: 5,
       },
     });
 
@@ -366,8 +423,8 @@ describe("image scoring providers", () => {
       context: {
         runId: "run-1",
         levelId: "level-1",
-        attemptId: "attempt-5",
-        attemptNumber: 5,
+        attemptId: "attempt-6",
+        attemptNumber: 6,
       },
       signal: controller.signal,
     });

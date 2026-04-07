@@ -49,11 +49,9 @@ export function createProviderAbortState(input: {
   return {
     signal: controller.signal,
     classifyError(error: unknown): AbortClassification {
-      if (!(error instanceof Error)) {
-        return null;
-      }
+      const errorName = error instanceof Error ? error.name : getReasonName(error);
 
-      if (error.name === "TimeoutError") {
+      if (errorName === "TimeoutError") {
         return "timeout";
       }
 
@@ -63,7 +61,7 @@ export function createProviderAbortState(input: {
         return "timeout";
       }
 
-      if (error.name === "AbortError") {
+      if (errorName === "AbortError") {
         return "interrupted";
       }
 

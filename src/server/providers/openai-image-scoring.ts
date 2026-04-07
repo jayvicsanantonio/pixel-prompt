@@ -76,6 +76,11 @@ interface ScoringResponsePayload {
   breakdown: Record<(typeof SCORE_BREAKDOWN_DIMENSIONS)[number], number>;
 }
 
+interface ParsedJsonResponse<T> {
+  failure?: ProviderFailure;
+  payload: T | null;
+}
+
 function buildProviderFailure(
   kind: ProviderFailureKind,
   code: string,
@@ -125,11 +130,38 @@ function resolveFailureKind(status: number, payload?: OpenAiResponsesPayload | n
   };
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T | null> {
+async function parseJsonResponseWithAbortHandling<T>(input: {
+  abortState: ReturnType<typeof createProviderAbortState>;
+  interruptedCode: string;
+  interruptedMessage: string;
+  response: Response;
+  timeoutCode: string;
+  timeoutMessage: string;
+}): Promise<ParsedJsonResponse<T>> {
   try {
-    return (await response.json()) as T;
-  } catch {
-    return null;
+    return {
+      payload: (await input.response.json()) as T,
+    };
+  } catch (error) {
+    const abortClassification = input.abortState.classifyError(error);
+
+    if (abortClassification === "timeout") {
+      return {
+        failure: buildProviderFailure("timeout", input.timeoutCode, input.timeoutMessage, true),
+        payload: null,
+      };
+    }
+
+    if (abortClassification === "interrupted") {
+      return {
+        failure: buildProviderFailure("interrupted", input.interruptedCode, input.interruptedMessage, true),
+        payload: null,
+      };
+    }
+
+    return {
+      payload: null,
+    };
   }
 }
 
@@ -264,7 +296,6 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
       );
     }
 
-    let response: Response;
     const abortState = createProviderAbortState({
       requestSignal: request.signal,
       timeoutMs: this.timeoutMs,
@@ -273,7 +304,7 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
     });
 
     try {
-      response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
+      const response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.apiKey}`,
@@ -313,6 +344,61 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
         }),
         signal: abortState.signal,
       });
+      const { failure, payload } = await parseJsonResponseWithAbortHandling<OpenAiResponsesPayload>({
+        abortState,
+        interruptedCode: "openai_scoring_interrupted",
+        interruptedMessage: "The scoring request was interrupted before OpenAI returned a score.",
+        response,
+        timeoutCode: "openai_scoring_timeout",
+        timeoutMessage: "OpenAI image scoring timed out before returning a score.",
+      });
+
+      if (failure) {
+        return failure;
+      }
+
+      if (!response.ok) {
+        const resolvedFailure = resolveFailureKind(response.status, payload);
+
+        return buildProviderFailure(
+          resolvedFailure.kind,
+          payload?.error?.code || `openai_http_${response.status}`,
+          payload?.error?.message || `OpenAI image scoring failed with status ${response.status}.`,
+          resolvedFailure.retryable,
+        );
+      }
+
+      const outputText = extractOutputText(payload);
+
+      if (!outputText) {
+        return buildProviderFailure(
+          "technical_failure",
+          "openai_scoring_missing_output",
+          "OpenAI returned a scoring response without structured output text.",
+          true,
+        );
+      }
+
+      let parsedPayload: ScoringResponsePayload;
+
+      try {
+        parsedPayload = JSON.parse(outputText) as ScoringResponsePayload;
+      } catch {
+        return buildProviderFailure(
+          "technical_failure",
+          "openai_scoring_invalid_json",
+          "OpenAI returned a scoring response that was not valid JSON.",
+          true,
+        );
+      }
+
+      return {
+        ok: true,
+        createdAt: new Date().toISOString(),
+        provider: this.modelRef,
+        score: normalizeScorePayload(parsedPayload, request, this.modelRef),
+        reasoning: parsedPayload.reasoning,
+      };
     } catch (error) {
       const abortClassification = abortState.classifyError(error);
 
@@ -343,50 +429,5 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
     } finally {
       abortState.cleanup();
     }
-
-    const payload = await parseJsonResponse<OpenAiResponsesPayload>(response);
-
-    if (!response.ok) {
-      const resolvedFailure = resolveFailureKind(response.status, payload);
-
-      return buildProviderFailure(
-        resolvedFailure.kind,
-        payload?.error?.code || `openai_http_${response.status}`,
-        payload?.error?.message || `OpenAI image scoring failed with status ${response.status}.`,
-        resolvedFailure.retryable,
-      );
-    }
-
-    const outputText = extractOutputText(payload);
-
-    if (!outputText) {
-      return buildProviderFailure(
-        "technical_failure",
-        "openai_scoring_missing_output",
-        "OpenAI returned a scoring response without structured output text.",
-        true,
-      );
-    }
-
-    let parsedPayload: ScoringResponsePayload;
-
-    try {
-      parsedPayload = JSON.parse(outputText) as ScoringResponsePayload;
-    } catch {
-      return buildProviderFailure(
-        "technical_failure",
-        "openai_scoring_invalid_json",
-        "OpenAI returned a scoring response that was not valid JSON.",
-        true,
-      );
-    }
-
-    return {
-      ok: true,
-      createdAt: new Date().toISOString(),
-      provider: this.modelRef,
-      score: normalizeScorePayload(parsedPayload, request, this.modelRef),
-      reasoning: parsedPayload.reasoning,
-    };
   }
 }

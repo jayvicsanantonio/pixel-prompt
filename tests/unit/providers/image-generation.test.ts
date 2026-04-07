@@ -251,6 +251,53 @@ describe("image generation providers", () => {
     });
   });
 
+  it("keeps timeout handling active while reading the response body", async () => {
+    const fetchImpl = vi.fn().mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal;
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () =>
+          await new Promise<never>((_resolve, reject) => {
+            const rejectWithAbortReason = () =>
+              reject(signal.reason ?? Object.assign(new Error("aborted"), { name: "AbortError" }));
+
+            if (signal.aborted) {
+              rejectWithAbortReason();
+              return;
+            }
+
+            signal.addEventListener("abort", rejectWithAbortReason, { once: true });
+          }),
+      } as unknown as Response;
+    });
+    const provider = new OpenAiImageGenerationProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+      timeoutMs: 5,
+    });
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "timeout",
+      code: "openai_generation_timeout",
+      message: "OpenAI image generation timed out before returning an image.",
+      retryable: true,
+      consumeAttempt: false,
+    });
+  });
+
   it("maps aborted request signals to interrupted failures", async () => {
     const controller = new AbortController();
     controller.abort();
