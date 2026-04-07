@@ -6,16 +6,158 @@ import { captureServerAnalyticsEvents } from "@/server/analytics";
 import { levels } from "@/content";
 import type { Level } from "@/lib/game";
 import { buildLandingExperience, recordAttempt, resolveResumeLevel, type RecordAttemptResult } from "@/server/game/session-state";
+import type { ProviderFailure, ProviderModelRef } from "@/server/providers";
+import { getImageGenerationProvider, getImageScoringProvider } from "@/server/providers";
 
 import {
   buildPromptValidationFailedAnalyticsEvent,
   buildResumeProgressAnalyticsEvents,
   buildSubmitAttemptAnalyticsEvents,
 } from "./analytics";
-import { evaluateMockAttempt } from "./mock-attempt-evaluator";
+import { buildAttemptResultFromScore, mapProviderFailureToAttemptResult } from "./mock-attempt-evaluator";
 import { countPromptCharacters } from "./session-persistence";
-import { getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
+import { getOrCreateSession, getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 import { createSubmissionDedupKey, withPendingSubmissionDedup } from "./submission-idempotency";
+
+interface SubmissionPreparation {
+  activeLevel: Level;
+  attemptCycle: number;
+  attemptId: string;
+  attemptNumber: number;
+  sessionToken: string;
+}
+
+interface ScoredSubmissionEvaluation {
+  generationDurationMs: number;
+  generationModelRef: ProviderModelRef;
+  generationResult:
+    | {
+        ok: true;
+        assetKey: string;
+        createdAt: string;
+        provider: ProviderModelRef;
+        seed?: string | null;
+        revisedPrompt?: string | null;
+      }
+    | ProviderFailure;
+  scoringDurationMs: number;
+  scoringModelRef: ProviderModelRef;
+  scoringResult:
+    | {
+        ok: true;
+        createdAt: string;
+        provider: ProviderModelRef;
+        score: {
+          raw: number;
+          normalized: number;
+          threshold: number;
+          passed: boolean;
+          breakdown: Record<string, number> | Partial<Record<string, number>>;
+          scorer: {
+            provider: string;
+            model: string;
+            version?: string;
+          };
+        };
+        reasoning?: string;
+      }
+    | ProviderFailure
+    | null;
+}
+
+function sanitizeAttemptForResponse(attemptResult: RecordAttemptResult["attempt"]) {
+  return {
+    ...attemptResult,
+    result: {
+      ...attemptResult.result,
+      scoringReasoning: undefined,
+    },
+  };
+}
+
+function resolveSubmissionPreparation(input: {
+  attemptId?: string;
+  levelId: string;
+  session: Awaited<ReturnType<typeof getOrCreateSession>>["session"];
+  sessionToken: string;
+}) {
+  const activeLevel = resolveResumeLevel(input.session.progress, levels);
+
+  if (!activeLevel || input.session.progress.currentLevelId == null) {
+    throw new Error("No active level is available for submission.");
+  }
+
+  const activeLevelProgress = input.session.progress.levels.find((levelProgress) => levelProgress.levelId === activeLevel.id);
+
+  if (activeLevel.id !== input.levelId) {
+    throw new Error("The current level changed while this submission was being processed.");
+  }
+
+  if (activeLevelProgress?.status === "failed") {
+    throw new Error("This level has no attempts left. Restart it before submitting again.");
+  }
+
+  const attemptCycle = activeLevelProgress?.currentAttemptCycle ?? 1;
+  const attemptsForCurrentCycle = input.session.attempts.filter(
+    (attempt) => attempt.levelId === activeLevel.id && attempt.attemptCycle === attemptCycle,
+  );
+
+  return {
+    activeLevel,
+    attemptCycle,
+    attemptId: input.attemptId ?? randomUUID(),
+    attemptNumber: attemptsForCurrentCycle.length + 1,
+    sessionToken: input.sessionToken,
+  } satisfies SubmissionPreparation;
+}
+
+async function evaluateSubmissionWithProviders(input: {
+  activeLevel: Level;
+  attemptId: string;
+  attemptNumber: number;
+  promptText: string;
+  runId: string;
+}) {
+  const generationProvider = getImageGenerationProvider();
+  const scoringProvider = getImageScoringProvider();
+  const generationStartedAt = Date.now();
+  const generationResult = await generationProvider.generateImage({
+    prompt: input.promptText,
+    context: {
+      runId: input.runId,
+      levelId: input.activeLevel.id,
+      attemptId: input.attemptId,
+      attemptNumber: input.attemptNumber,
+    },
+  });
+  const generationDurationMs = Date.now() - generationStartedAt;
+  const scoringStartedAt = Date.now();
+  const scoringResult =
+    generationResult.ok
+      ? await scoringProvider.scoreImageMatch({
+          prompt: input.promptText,
+          generatedImageAssetKey: generationResult.assetKey,
+          targetImage: input.activeLevel.targetImage,
+          threshold: input.activeLevel.threshold,
+          context: {
+            runId: input.runId,
+            levelId: input.activeLevel.id,
+            attemptId: input.attemptId,
+            attemptNumber: input.attemptNumber,
+          },
+        })
+      : null;
+  const scoringDurationMs = generationResult.ok ? Date.now() - scoringStartedAt : 0;
+
+  return {
+    generationDurationMs,
+    generationModelRef: generationProvider.modelRef,
+    generationResult,
+    scoringDurationMs,
+    scoringModelRef: scoringProvider.modelRef,
+    scoringResult,
+  } satisfies ScoredSubmissionEvaluation;
+}
 
 function getCookieValue(request: Request, cookieName: string) {
   const cookieHeader = request.headers.get("cookie");
@@ -99,7 +241,7 @@ function buildSubmitAttemptResponse(sessionToken: string | undefined, attemptRes
   const response = Response.json({
     ok: true,
     transition: attemptResult.transition,
-    attempt: attemptResult.attempt,
+    attempt: sanitizeAttemptForResponse(attemptResult.attempt),
     currentLevel: resolveResumeLevel(attemptResult.session.progress, levels),
     landing: buildLandingExperience(attemptResult.session, levels),
     progress: attemptResult.session.progress,
@@ -327,45 +469,127 @@ export async function handleSubmitAttempt(request: Request) {
       promptText: trimmedPrompt,
     }),
     async (): Promise<SubmitAttemptOutcome> => {
-      let mutation;
       const submissionStartedAt = Date.now();
+      const preparedSession = await getOrCreateSession(sessionToken);
+      let preparation: SubmissionPreparation;
 
       try {
-        mutation = await mutateSession(sessionToken, async (activeSession) => {
-          const activeLevel = resolveResumeLevel(activeSession.progress, levels);
-
-          if (!activeLevel || activeSession.progress.currentLevelId == null) {
-            throw new Error("No active level is available for submission.");
+        preparation = resolveSubmissionPreparation({
+          levelId,
+          session: preparedSession.session,
+          sessionToken: preparedSession.token,
+        });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "No active level is available for submission.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "run_complete",
+                message: error.message,
+              },
+            };
           }
 
-          const activeLevelProgress = activeSession.progress.levels.find(
-            (levelProgress) => levelProgress.levelId === activeLevel.id,
-          );
+          if (error.message === "The current level changed while this submission was being processed.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "level_changed",
+                message: error.message,
+              },
+            };
+          }
 
-          if (activeLevel.id !== levelId) {
+          if (error.message === "This level has no attempts left. Restart it before submitting again.") {
+            return {
+              status: 409,
+              body: {
+                ok: false,
+                code: "restart_required",
+                message: error.message,
+              },
+            };
+          }
+        }
+
+        throw error;
+      }
+
+      const evaluatedSubmission = await evaluateSubmissionWithProviders({
+        activeLevel: preparation.activeLevel,
+        attemptId: preparation.attemptId,
+        attemptNumber: preparation.attemptNumber,
+        promptText: trimmedPrompt,
+        runId: preparedSession.session.progress.runId,
+      });
+
+      let mutation;
+
+      try {
+        mutation = await mutateSession(preparation.sessionToken, async (activeSession) => {
+          const refreshedPreparation = resolveSubmissionPreparation({
+            attemptId: preparation.attemptId,
+            levelId,
+            session: activeSession,
+            sessionToken: preparation.sessionToken,
+          });
+
+          if (
+            activeSession.progress.runId !== preparedSession.session.progress.runId ||
+            refreshedPreparation.activeLevel.id !== preparation.activeLevel.id ||
+            refreshedPreparation.attemptCycle !== preparation.attemptCycle ||
+            refreshedPreparation.attemptNumber !== preparation.attemptNumber
+          ) {
             throw new Error("The current level changed while this submission was being processed.");
           }
 
-          if (activeLevelProgress?.status === "failed") {
-            throw new Error("This level has no attempts left. Restart it before submitting again.");
-          }
-
-          const attemptId = randomUUID();
-          const evaluatedAttempt = evaluateMockAttempt(activeLevel, trimmedPrompt, attemptId);
           const attemptResult = recordAttempt({
             session: activeSession,
-            levelId: activeLevel.id,
-            attemptId,
+            levelId: preparation.activeLevel.id,
+            attemptId: preparation.attemptId,
             promptText: trimmedPrompt,
-            result: evaluatedAttempt.result,
-            generation: evaluatedAttempt.generation,
+            result: !evaluatedSubmission.generationResult.ok
+              ? mapProviderFailureToAttemptResult(evaluatedSubmission.generationResult)
+              : evaluatedSubmission.scoringResult?.ok
+                ? buildAttemptResultFromScore(
+                    evaluatedSubmission.scoringResult.score,
+                    evaluatedSubmission.scoringResult.reasoning,
+                  )
+                : mapProviderFailureToAttemptResult(
+                    evaluatedSubmission.scoringResult ?? {
+                      ok: false,
+                      kind: "technical_failure",
+                      code: "scoring_result_missing",
+                      message: "Scoring did not return a result.",
+                      retryable: true,
+                      consumeAttempt: false,
+                    },
+                  ),
+            generation: evaluatedSubmission.generationResult.ok
+              ? {
+                  provider: evaluatedSubmission.generationResult.provider.provider,
+                  model: evaluatedSubmission.generationResult.provider.model,
+                  assetKey: evaluatedSubmission.generationResult.assetKey,
+                  seed: evaluatedSubmission.generationResult.seed ?? undefined,
+                  revisedPrompt: evaluatedSubmission.generationResult.revisedPrompt ?? undefined,
+                }
+              : {
+                  provider: evaluatedSubmission.generationModelRef.provider,
+                  model: evaluatedSubmission.generationModelRef.model,
+                },
           });
 
           return {
             session: attemptResult.session,
             value: {
               attemptResult,
-              analyticsLevel: activeLevel,
+              analyticsLevel: preparation.activeLevel,
+              generationDurationMs: evaluatedSubmission.generationDurationMs,
+              scoringDurationMs: evaluatedSubmission.scoringDurationMs,
+              scoringModelRef: evaluatedSubmission.scoringModelRef,
             },
           };
         });
@@ -408,7 +632,7 @@ export async function handleSubmitAttempt(request: Request) {
         throw error;
       }
 
-      const { attemptResult, analyticsLevel } = mutation.value;
+      const { attemptResult, analyticsLevel, generationDurationMs, scoringDurationMs, scoringModelRef } = mutation.value;
       const occurredAt = new Date().toISOString();
       const totalDurationMs = Date.now() - submissionStartedAt;
 
@@ -417,7 +641,10 @@ export async function handleSubmitAttempt(request: Request) {
           attemptResult,
           level: analyticsLevel,
           occurredAt,
+          generationDurationMs,
           promptLength: promptCharacterCount,
+          scoringModelRef,
+          scoringDurationMs,
           totalDurationMs,
         }),
       );

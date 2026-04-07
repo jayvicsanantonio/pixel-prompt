@@ -72,6 +72,7 @@ export interface AttemptResult {
   score?: AttemptScore;
   strongestAttemptScore?: number | null;
   tipIds: string[];
+  scoringReasoning?: string;
   errorCode?: string;
   errorMessage?: string;
 }

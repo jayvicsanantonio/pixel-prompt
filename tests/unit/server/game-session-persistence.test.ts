@@ -57,6 +57,7 @@ describe("session-persistence", () => {
         id: "attempt-1",
         createdAt: new Date("2026-04-04T00:05:00.000Z"),
         scoreNormalized: 33,
+        scoringReasoning: "The first attempt matched the still life subject but missed the composition.",
       }),
       createPersistedAttemptRow({
         id: "attempt-2",
@@ -87,5 +88,8 @@ describe("session-persistence", () => {
     ]);
 
     expect(attempts.map((attempt) => attempt.result.strongestAttemptScore)).toEqual([33, 55, 55]);
+    expect(attempts[0]?.result.scoringReasoning).toBe(
+      "The first attempt matched the still life subject but missed the composition.",
+    );
   });
 });
