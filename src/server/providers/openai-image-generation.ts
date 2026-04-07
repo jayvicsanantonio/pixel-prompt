@@ -43,8 +43,16 @@ function getAbortSignal(timeoutMs: number) {
   return undefined;
 }
 
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
+function isTimedAbort(error: unknown, signal?: AbortSignal) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "TimeoutError") {
+    return true;
+  }
+
+  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 function toIsoDateTime(created?: number) {
@@ -146,6 +154,7 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
     let response: Response;
+    const signal = getAbortSignal(this.timeoutMs);
 
     try {
       response = await this.fetchImpl(OPENAI_IMAGE_GENERATIONS_URL, {
@@ -158,10 +167,10 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
           model: this.modelRef.model,
           prompt: request.prompt,
         }),
-        signal: getAbortSignal(this.timeoutMs),
+        signal,
       });
     } catch (error) {
-      if (isAbortError(error)) {
+      if (isTimedAbort(error, signal)) {
         return buildProviderFailure(
           "timeout",
           "openai_generation_timeout",
@@ -208,10 +217,21 @@ export class OpenAiImageGenerationProvider implements ImageGenerationProvider {
       attemptId: request.context.attemptId,
     });
 
-    await persistGeneratedOutput({
-      assetKey,
-      imageBase64: firstImage.b64_json,
-    });
+    try {
+      await persistGeneratedOutput({
+        assetKey,
+        imageBase64: firstImage.b64_json,
+      });
+    } catch (error) {
+      return buildProviderFailure(
+        "technical_failure",
+        "generated_output_persist_failed",
+        error instanceof Error
+          ? `Generated image could not be persisted at ${assetKey}: ${error.message}`
+          : `Generated image could not be persisted at ${assetKey}.`,
+        true,
+      );
+    }
 
     return {
       ok: true,

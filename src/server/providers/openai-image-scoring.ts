@@ -83,8 +83,16 @@ function getAbortSignal(timeoutMs: number) {
   return undefined;
 }
 
-function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === "AbortError";
+function isTimedAbort(error: unknown, signal?: AbortSignal) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "TimeoutError") {
+    return true;
+  }
+
+  return error.name === "AbortError" && signal?.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 function buildProviderFailure(
@@ -193,7 +201,7 @@ function normalizeScorePayload(payload: ScoringResponsePayload, request: ImageSc
   ) as AttemptScore["breakdown"];
 
   return {
-    raw: Number((normalized / 100).toFixed(6)),
+    raw: normalized / 100,
     normalized,
     threshold: request.threshold,
     passed: normalized >= request.threshold,
@@ -267,6 +275,7 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
     }
 
     let response: Response;
+    const signal = getAbortSignal(this.timeoutMs);
 
     try {
       response = await this.fetchImpl(OPENAI_RESPONSES_API_URL, {
@@ -307,10 +316,10 @@ export class OpenAiImageScoringProvider implements ImageScoringProvider {
             },
           },
         }),
-        signal: getAbortSignal(this.timeoutMs),
+        signal,
       });
     } catch (error) {
-      if (isAbortError(error)) {
+      if (isTimedAbort(error, signal)) {
         return buildProviderFailure(
           "timeout",
           "openai_scoring_timeout",

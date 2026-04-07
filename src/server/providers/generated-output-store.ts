@@ -1,5 +1,4 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 const formatExtensions = {
@@ -40,7 +39,17 @@ function getGeneratedOutputPath(assetKey: string) {
 }
 
 export function getGeneratedOutputRoot() {
-  return process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR?.trim() || path.join(tmpdir(), "pixel-prompt", "generated-output");
+  const configuredRoot = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR?.trim();
+
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set in production until durable object storage is configured.");
+  }
+
+  return path.join(process.cwd(), ".pixel-prompt", "generated-output");
 }
 
 export function buildGeneratedOutputAssetKey(input: BuildGeneratedOutputAssetKeyInput) {

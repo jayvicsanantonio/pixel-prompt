@@ -67,6 +67,10 @@ describe("game analytics", () => {
       occurredAt: "2026-04-06T10:00:01.000Z",
       generationDurationMs: 1400,
       promptLength: 18,
+      scoringModelRef: {
+        provider: "openai",
+        model: "gpt-5.4-mini",
+      },
       scoringDurationMs: 220,
       totalDurationMs: 1620,
     });
@@ -82,6 +86,8 @@ describe("game analytics", () => {
       }),
       expect.objectContaining({
         name: "scoring_completed",
+        provider: "openai",
+        model: "gpt-5.4-mini",
         success: false,
         failureKind: "asset_unavailable",
       }),

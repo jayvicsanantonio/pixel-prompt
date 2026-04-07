@@ -1,6 +1,6 @@
 import { defineAnalyticsEvent, type AnalyticsEvent } from "@/lib/analytics";
 import type { Level, LevelAttempt } from "@/lib/game";
-import type { ProviderFailureKind } from "@/server/providers";
+import type { ProviderFailureKind, ProviderModelRef } from "@/server/providers";
 
 import type { GameSessionSnapshot, RecordAttemptResult } from "./session-state";
 
@@ -24,6 +24,7 @@ interface SubmitAttemptAnalyticsInput {
   occurredAt: string;
   generationDurationMs: number;
   promptLength: number;
+  scoringModelRef?: ProviderModelRef;
   scoringDurationMs: number;
   totalDurationMs: number;
 }
@@ -148,8 +149,8 @@ export function buildSubmitAttemptAnalyticsEvents(input: SubmitAttemptAnalyticsI
         runId: session.progress.runId,
         levelId: attempt.levelId,
         attemptId: attempt.id,
-        provider: attempt.result.score?.scorer.provider ?? "unknown",
-        model: attempt.result.score?.scorer.model ?? "unknown",
+        provider: attempt.result.score?.scorer.provider ?? input.scoringModelRef?.provider ?? "unknown",
+        model: attempt.result.score?.scorer.model ?? input.scoringModelRef?.model ?? "unknown",
         durationMs: scoringDurationMs,
         success: attempt.result.status === "scored",
         failureKind: attempt.result.status === "scored" ? undefined : failureKind,

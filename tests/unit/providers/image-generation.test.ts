@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createMockImageGenerationProvider,
-  getGeneratedOutputRoot,
   getImageGenerationProvider,
   OpenAiImageGenerationProvider,
   readGeneratedOutput,
@@ -18,17 +17,34 @@ describe("image generation providers", () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
   const originalEnableOpenAiInTests = process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
   const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+  let generatedOutputDir = "";
 
   beforeEach(async () => {
-    process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = path.join(process.cwd(), ".tmp", `vitest-generated-${Date.now()}`);
-    await rm(getGeneratedOutputRoot(), { recursive: true, force: true });
+    generatedOutputDir = path.join(process.cwd(), ".tmp", `vitest-generated-${Date.now()}`);
+    process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = generatedOutputDir;
+    await rm(generatedOutputDir, { recursive: true, force: true });
   });
 
   afterEach(async () => {
-    process.env.OPENAI_API_KEY = originalApiKey;
-    process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = originalEnableOpenAiInTests;
-    process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = originalGeneratedOutputDir;
-    await rm(getGeneratedOutputRoot(), { recursive: true, force: true });
+    await rm(generatedOutputDir, { recursive: true, force: true });
+
+    if (originalApiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    if (originalEnableOpenAiInTests === undefined) {
+      delete process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
+    } else {
+      process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = originalEnableOpenAiInTests;
+    }
+
+    if (originalGeneratedOutputDir === undefined) {
+      delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+    } else {
+      process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = originalGeneratedOutputDir;
+    }
   });
 
   it("defaults to the mock provider in tests even when an API key is present", () => {
@@ -166,6 +182,73 @@ describe("image generation providers", () => {
       code: "content_policy_violation",
       message: "Request rejected by safety policy.",
       retryable: false,
+      consumeAttempt: false,
+    });
+  });
+
+  it("returns a structured failure when generated-output persistence fails", async () => {
+    const provider = new OpenAiImageGenerationProvider({
+      apiKey: "sk-test",
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                b64_json: onePixelPngBase64,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      ),
+    });
+    process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = "/dev/null/generated-output";
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      kind: "technical_failure",
+      code: "generated_output_persist_failed",
+      consumeAttempt: false,
+    });
+  });
+
+  it("treats AbortSignal timeout errors as timeout failures", async () => {
+    const provider = new OpenAiImageGenerationProvider({
+      apiKey: "sk-test",
+      fetchImpl: vi.fn().mockRejectedValue(Object.assign(new Error("timed out"), { name: "TimeoutError" })),
+    });
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "timeout",
+      code: "openai_generation_timeout",
+      message: "OpenAI image generation timed out before returning an image.",
+      retryable: true,
       consumeAttempt: false,
     });
   });

@@ -44,10 +44,21 @@ export class MockImageGenerationProvider implements ImageGenerationProvider {
       attemptId: request.context.attemptId,
     });
 
-    await persistGeneratedOutput({
-      assetKey,
-      imageBase64: ONE_PIXEL_PNG_BASE64,
-    });
+    try {
+      await persistGeneratedOutput({
+        assetKey,
+        imageBase64: ONE_PIXEL_PNG_BASE64,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        kind: "technical_failure",
+        code: "mock_generated_output_persist_failed",
+        message: error instanceof Error ? error.message : "The mock generated image could not be persisted.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
 
     return {
       ok: true,
