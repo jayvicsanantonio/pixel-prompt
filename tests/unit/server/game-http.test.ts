@@ -725,6 +725,51 @@ describe("game http handlers", () => {
     });
   });
 
+  it("refunds the attempt when the request disconnects during generation", async () => {
+    const sessionToken = await createSessionToken();
+    const controller = new AbortController();
+
+    const submitResponsePromise = postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #slow",
+        }),
+        signal: controller.signal,
+      }),
+    );
+
+    await Promise.resolve();
+    controller.abort("client disconnected");
+
+    const submitResponse = await submitResponsePromise;
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "error",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        result: {
+          status: "technical_failure",
+          failureKind: "interrupted",
+          errorCode: "mock_generation_interrupted",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
   it("requires a restart after the final failed attempt", async () => {
     const sessionToken = await createSessionToken();
 

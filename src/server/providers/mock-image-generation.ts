@@ -7,6 +7,23 @@ const MOCK_IMAGE_MODEL: ProviderModelRef = {
   model: "local-generation-fixture-v1",
 };
 
+async function waitForAbortableMockGeneration(signal?: AbortSignal) {
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, 20);
+
+    function handleAbort() {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }
+
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
 export class MockImageGenerationProvider implements ImageGenerationProvider {
   readonly providerId = "mock";
   readonly modelRef = MOCK_IMAGE_MODEL;
@@ -24,6 +41,21 @@ export class MockImageGenerationProvider implements ImageGenerationProvider {
     }
 
     const normalizedPrompt = request.prompt.toLowerCase();
+
+    if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.slowGeneration)) {
+      await waitForAbortableMockGeneration(request.signal);
+
+      if (request.signal?.aborted) {
+        return {
+          ok: false,
+          kind: "interrupted",
+          code: "mock_generation_interrupted",
+          message: "The mock generation fixture was interrupted before returning an image.",
+          retryable: true,
+          consumeAttempt: false,
+        };
+      }
+    }
 
     if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationContentPolicy)) {
       return {

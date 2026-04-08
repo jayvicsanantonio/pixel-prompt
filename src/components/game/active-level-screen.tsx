@@ -2,8 +2,16 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { levels, tipRules, uiCopy } from "@/content";
-import { toPlayerFacingScore, type ActiveLevelScreenState, type GameProgress, type LandingExperienceState, type Level, type LevelAttempt } from "@/lib/game";
+import { levels, uiCopy } from "@/content";
+import {
+  toPlayerFacingScore,
+  type ActiveLevelScreenState,
+  type GameProgress,
+  type LandingExperienceState,
+  type Level,
+  type LevelAttempt,
+} from "@/lib/game";
+import { buildFailurePreview, buildResultPreview, buildSummaryPreview, findLevelProgress } from "@/lib/game/screen-state";
 import styles from "./active-level-screen.module.css";
 
 interface ActiveLevelScreenProps {
@@ -41,8 +49,6 @@ interface ProgressMutationErrorResponse {
   message: string;
 }
 
-const tipRuleBodies = new Map(tipRules.map((tipRule) => [tipRule.id, tipRule.body]));
-
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -52,83 +58,6 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
-function getLevelProgress(progress: GameProgress, levelId: string) {
-  return progress.levels.find((levelProgress) => levelProgress.levelId === levelId) ?? null;
-}
-
-function getFirstTipBody(tipIds: string[]) {
-  for (const tipId of tipIds) {
-    const body = tipRuleBodies.get(tipId);
-
-    if (body) {
-      return body;
-    }
-  }
-
-  return null;
-}
-
-function buildLiveSummaryPreview(progress: GameProgress) {
-  const levelSummaries = levels.map((level) => {
-    const levelProgress = getLevelProgress(progress, level.id);
-
-    return {
-      levelId: level.id,
-      levelNumber: level.number,
-      levelTitle: level.title,
-      bestScore: levelProgress?.bestScore ?? 0,
-      attemptsUsed: levelProgress?.attemptsUsed ?? 0,
-      replayHref: `/play?level=${level.number}`,
-    };
-  });
-
-  const completedLevels = levelSummaries.filter((levelSummary) => levelSummary.bestScore > 0);
-  const firstCompletedLevel = completedLevels[0] ?? null;
-  const lastCompletedLevel = completedLevels[completedLevels.length - 1] ?? null;
-  const improvementDelta =
-    firstCompletedLevel && lastCompletedLevel ? lastCompletedLevel.bestScore - firstCompletedLevel.bestScore : 0;
-  const improvementSummary = uiCopy.gameplay.summary.buildImprovementSummary(
-    improvementDelta,
-    firstCompletedLevel?.levelTitle ?? null,
-    lastCompletedLevel?.levelTitle ?? null,
-    completedLevels.length,
-  );
-
-  return {
-    levelsCompleted: progress.levels.filter((levelProgress) => levelProgress.completedAt != null).length,
-    totalAttemptsUsed: progress.totalAttemptsUsed,
-    bestScores: levelSummaries,
-    improvementDelta,
-    improvementSummary,
-    encouragement: uiCopy.gameplay.summary.encouragement,
-  };
-}
-
-function buildLiveFailureSummary(level: Level, attempt: LevelAttempt, progress: GameProgress) {
-  const tipBody = getFirstTipBody(attempt.result.tipIds);
-
-  if (tipBody) {
-    return tipBody;
-  }
-
-  const strongestAttemptScore = attempt.result.strongestAttemptScore ?? getLevelProgress(progress, level.id)?.bestScore ?? 0;
-
-  return uiCopy.gameplay.failure.buildFallbackSummary(strongestAttemptScore, level.number);
-}
-
-function buildLiveResultSummary(level: Level, attempt: LevelAttempt) {
-  const score = attempt.result.score;
-
-  if (!score) {
-    return uiCopy.gameplay.result.scoreUnavailable;
-  }
-
-  return (
-    getFirstTipBody(attempt.result.tipIds) ??
-    uiCopy.gameplay.result.buildResolvedSummary(Math.round(score.normalized), level.threshold, score.passed)
-  );
-}
-
 function buildLiveScreenState(input: {
   previousState: ActiveLevelScreenState;
   transition: SubmitAttemptSuccessResponse["transition"];
@@ -137,7 +66,7 @@ function buildLiveScreenState(input: {
   currentLevel: Level | null;
 }): ActiveLevelScreenState {
   const attemptedLevel = levels.find((level) => level.id === input.attempt.levelId) ?? input.previousState.level;
-  const attemptedLevelProgress = getLevelProgress(input.progress, attemptedLevel.id);
+  const attemptedLevelProgress = findLevelProgress(input.progress, attemptedLevel.id);
   const nextLevel =
     input.transition === "passed" && input.currentLevel && input.currentLevel.id !== attemptedLevel.id ? input.currentLevel : null;
   const strongestAttemptScore =
@@ -148,11 +77,7 @@ function buildLiveScreenState(input: {
     attemptsUsed: attemptedLevelProgress?.attemptsUsed ?? input.previousState.attemptsUsed,
     attemptsRemaining: attemptedLevelProgress?.attemptsRemaining ?? input.previousState.attemptsRemaining,
     promptDraft: input.attempt.promptText,
-    resultPreview: {
-      generatedImageAlt: uiCopy.gameplay.result.generatedImageAlt(input.attempt.promptText),
-      score: input.attempt.result.score ?? input.previousState.resultPreview.score,
-      summary: buildLiveResultSummary(attemptedLevel, input.attempt),
-    },
+    resultPreview: buildResultPreview(attemptedLevel, input.attempt),
     continuation: {
       attemptsRemainingAfterResult:
         attemptedLevelProgress?.attemptsRemaining ?? input.previousState.continuation.attemptsRemainingAfterResult,
@@ -162,10 +87,14 @@ function buildLiveScreenState(input: {
       restartLevelHref: `/play?level=${attemptedLevel.number}`,
     },
     failurePreview: {
+      ...buildFailurePreview({
+        level: attemptedLevel,
+        attempt: input.attempt,
+        progress: input.progress,
+      }),
       strongestAttemptScore,
-      summary: buildLiveFailureSummary(attemptedLevel, input.attempt, input.progress),
     },
-    summaryPreview: buildLiveSummaryPreview(input.progress),
+    summaryPreview: buildSummaryPreview(input.progress),
   };
 }
 
@@ -174,7 +103,7 @@ function buildResetScreenState(input: {
   currentLevel: Level;
   progress: GameProgress;
 }): ActiveLevelScreenState {
-  const currentLevelProgress = getLevelProgress(input.progress, input.currentLevel.id);
+  const currentLevelProgress = findLevelProgress(input.progress, input.currentLevel.id);
   const nextLevel = levels.find((level) => level.number === input.currentLevel.number + 1) ?? null;
 
   return {
@@ -190,7 +119,7 @@ function buildResetScreenState(input: {
       nextLevelTitle: nextLevel?.title ?? null,
       restartLevelHref: `/play?level=${input.currentLevel.number}`,
     },
-    summaryPreview: buildLiveSummaryPreview(input.progress),
+    summaryPreview: buildSummaryPreview(input.progress),
   };
 }
 
@@ -205,9 +134,9 @@ export function ActiveLevelScreen({
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [screenMode, setScreenMode] = useState<
     "active" | "generating" | "result" | "success" | "retry" | "failure" | "summary"
-  >("active");
+  >(initialState.initialScreenMode ?? "active");
   const [isTargetExpanded, setIsTargetExpanded] = useState(false);
-  const [submittedPrompt, setSubmittedPrompt] = useState("");
+  const [submittedPrompt, setSubmittedPrompt] = useState(initialState.promptDraft);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTransitioningLevel, setIsTransitioningLevel] = useState(false);
   const inspectDialogRef = useRef<HTMLDivElement | null>(null);

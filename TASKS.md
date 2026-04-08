@@ -458,13 +458,14 @@ Tasks:
 
 - [x] connect frontend submission flow to real backend endpoint (the `/play` screen now posts real prompts to `/api/game/submit-attempt`, auto-transitions into the returned result state, and preserves draft/error behavior under server responses)
 - [x] connect backend attempt processing to generation and scoring adapters (the submit-attempt backend already routes valid submissions through the configured generation and scoring providers in `src/server/game/http.ts`)
-- [ ] display real score, pass/fail state, retry tips, and strongest-attempt context on failure
-- [ ] connect restart-level UI and backend flow so failed levels can be retried immediately
-- [ ] wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
-- [ ] decrement attempts only after valid scored submissions
-- [ ] persist best score, attempt history, and unlocked level progression
-- [ ] recover safely from refresh or disconnect during generation
-- [ ] verify gameplay events and QA the happy-path plus core failure-path loop
+- [x] display real score, pass/fail state, retry tips, and strongest-attempt context on failure
+- [x] connect restart-level UI and backend flow so failed levels can be retried immediately
+- [x] wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
+- [x] decrement attempts only after valid scored submissions
+- [x] persist best score, attempt history, and unlocked level progression
+- [x] recover safely from refresh or disconnect during generation
+- [x] verify gameplay events and QA the happy-path plus core failure-path loop
+- [x] replace mocked landing and `/play` bootstrap state with live resume-progress/session data so refresh and resume flows are user-visible
 
 Exit criteria:
 
