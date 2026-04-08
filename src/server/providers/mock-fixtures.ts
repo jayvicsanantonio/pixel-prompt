@@ -10,6 +10,7 @@ export const MOCK_IMAGE_PNG_BASE64 =
 export const MOCK_PROVIDER_PROMPT_MARKERS = {
   generationContentPolicy: "#policy",
   interrupted: "#interrupt",
+  slowGeneration: "#slow",
   scoringContentPolicy: "#score-policy",
   timeout: "#timeout",
 } as const;

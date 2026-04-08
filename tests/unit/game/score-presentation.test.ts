@@ -27,4 +27,26 @@ describe("score presentation", () => {
     expect("breakdown" in playerFacing).toBe(false);
     expect("raw" in playerFacing).toBe(false);
   });
+
+  it("floors the visible percentage so failed scores never round up to the threshold", () => {
+    const playerFacing = toPlayerFacingScore({
+      raw: 0.496,
+      normalized: 49.6,
+      threshold: 50,
+      passed: false,
+      breakdown: {
+        subject: 52,
+      },
+      scorer: {
+        provider: "openai",
+        model: "gpt-5.4-mini",
+      },
+    });
+
+    expect(playerFacing).toEqual({
+      percentage: 49,
+      passed: false,
+      threshold: 50,
+    });
+  });
 });

@@ -1,5 +1,7 @@
 import type { AttemptScore, Level } from "./types";
 
+export type ActiveLevelInitialScreenMode = "active" | "failure";
+
 export interface ActiveLevelResultPreview {
   generatedImageAlt: string;
   score: AttemptScore;
@@ -46,4 +48,5 @@ export interface ActiveLevelScreenState {
   continuation: ActiveLevelContinuationPreview;
   failurePreview: ActiveLevelFailurePreview;
   summaryPreview: ActiveLevelSummaryPreview;
+  initialScreenMode?: ActiveLevelInitialScreenMode;
 }

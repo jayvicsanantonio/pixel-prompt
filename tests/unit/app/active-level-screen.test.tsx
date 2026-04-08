@@ -245,6 +245,145 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Needs Retry")).toBeInTheDocument();
   });
 
+  it("surfaces strongest-attempt context from the live failure response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          transition: "failed",
+          attempt: {
+            id: "attempt-live-2",
+            runId: "run-1",
+            levelId: "level-2",
+            attemptCycle: 1,
+            attemptNumber: 3,
+            promptText: "cinematic neon portrait in a wet alley at midnight",
+            createdAt: "2026-04-07T08:05:00.000Z",
+            consumedAttempt: true,
+            generation: {
+              provider: "mock",
+              model: "mock-image",
+              assetKey: "generated/level-2/attempt-live-2.png",
+            },
+            result: {
+              status: "scored",
+              outcome: "failed",
+              strongestAttemptScore: 59,
+              tipIds: ["tip-context-urban-night"],
+              score: {
+                raw: 0.59,
+                normalized: 59,
+                threshold: 60,
+                passed: false,
+                breakdown: {
+                  context: 34,
+                  style: 45,
+                },
+                scorer: {
+                  provider: "mock",
+                  model: "mock-scorer",
+                },
+              },
+            },
+          },
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 0,
+              bestScore: 59,
+              helperText: "Pick up the same run without replaying cleared progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 2,
+            totalAttemptsUsed: 4,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:05:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "failed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 3,
+                attemptsRemaining: 0,
+                bestScore: 59,
+                strongestAttemptId: "attempt-live-2",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: "2026-04-07T08:05:00.000Z",
+              },
+              {
+                levelId: "level-3",
+                status: "locked",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: null,
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ActiveLevelScreen
+        state={getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 })}
+        submissionEndpoint="/api/game/submit-attempt"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("Compare the target against your generated match")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("59%");
+
+    fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
+
+    expect(screen.getByText("The best try stays with you")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("59%");
+    expect(
+      screen.getByText(
+        "Call out the wet alley, neon signage, and late-night atmosphere directly so the portrait lands in the right environment.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("surfaces server submission errors without clearing the draft", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -400,6 +539,21 @@ describe("ActiveLevelScreen", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Restart Level" })).toHaveAttribute("href", "/play?level=2");
     expect(screen.getByRole("button", { name: "Review Result Again" })).toBeInTheDocument();
+  });
+
+  it("can boot directly into the failure state for a saved failed level", () => {
+    render(
+      <ActiveLevelScreen
+        state={{
+          ...getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 3 }),
+          initialScreenMode: "failure",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("The best try stays with you")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("59%");
+    expect(screen.getByText("cinematic neon portrait in a wet alley at midnight")).toBeInTheDocument();
   });
 
   it("restarts a failed level through the live restart endpoint", async () => {
