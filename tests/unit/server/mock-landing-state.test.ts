@@ -29,7 +29,7 @@ describe("getMockLandingState", () => {
         levelsCleared: 1,
         attemptsRemaining: 2,
         bestScore: 54,
-        helperText: "Pick up the same run without replaying the opening level.",
+        helperText: "Pick up the same run without replaying cleared progress.",
       },
     });
   });

@@ -429,11 +429,11 @@ Tasks for Agent 5:
 
 - [x] create initial levels and threshold values with category, difficulty, and theme metadata (seeded levels already live in `src/content/levels/index.ts`; content tests now lock thresholds plus category/difficulty/theme metadata)
 - [x] define first-pass retry tip heuristics across all PRD visual-detail categories (seeded tip rules already cover every PRD breakdown dimension in `src/content/tips/index.ts`; tests now lock category coverage plus first-retry availability)
-- define analytics event dictionary mapped to the PRD metrics and acceptance checks
-- author QA matrix that enumerates all PRD edge cases and assigns ownership
-- define copy guidelines for short, concrete, beginner-friendly UX text
-- draft UX copy for all MVP states and CTA labels
-- draft non-punitive failure copy and replay-or-return encouragement for the final summary
+- [x] define analytics event dictionary mapped to the PRD metrics and acceptance checks (documented in `docs/foundation/analytics-event-map.md`, with typed event coverage in `src/lib/analytics/events.ts` and analytics tests)
+- [x] author QA matrix that enumerates all PRD edge cases and assigns ownership (documented in `docs/foundation/qa-matrix.md`, including current automated coverage and remaining manual launch checks)
+- [x] define copy guidelines for short, concrete, beginner-friendly UX text (documented in `docs/foundation/ux-copy-guidelines.md`, including state-by-state voice rules and prototype-language exclusions)
+- [x] draft UX copy for all MVP states and CTA labels (captured in `src/content/ui-copy.ts` as the structured copy source, with resume-state server copy now reading from the shared draft)
+- [x] draft non-punitive failure copy and replay-or-return encouragement for the final summary (applied to the shared copy source, the mocked failure/final-summary state data, and the `ActiveLevelScreen` summary/failure surfaces)
 
 Exit criteria:
 
@@ -456,15 +456,15 @@ Coordination owner:
 
 Tasks:
 
-- connect frontend submission flow to real backend endpoint
-- connect backend attempt processing to generation and scoring adapters
-- display real score, pass/fail state, retry tips, and strongest-attempt context on failure
-- connect restart-level UI and backend flow so failed levels can be retried immediately
-- wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
-- decrement attempts only after valid scored submissions
-- persist best score, attempt history, and unlocked level progression
-- recover safely from refresh or disconnect during generation
-- verify gameplay events and QA the happy-path plus core failure-path loop
+- [x] connect frontend submission flow to real backend endpoint (the `/play` screen now posts real prompts to `/api/game/submit-attempt`, auto-transitions into the returned result state, and preserves draft/error behavior under server responses)
+- [x] connect backend attempt processing to generation and scoring adapters (the submit-attempt backend already routes valid submissions through the configured generation and scoring providers in `src/server/game/http.ts`)
+- [ ] display real score, pass/fail state, retry tips, and strongest-attempt context on failure
+- [ ] connect restart-level UI and backend flow so failed levels can be retried immediately
+- [ ] wire the runtime tip-selection engine to score breakdowns, attempt history, and Agent 5 tip rules
+- [ ] decrement attempts only after valid scored submissions
+- [ ] persist best score, attempt history, and unlocked level progression
+- [ ] recover safely from refresh or disconnect during generation
+- [ ] verify gameplay events and QA the happy-path plus core failure-path loop
 
 Exit criteria:
 
@@ -666,5 +666,5 @@ The first concrete tasks for the repo should be:
 - `README.md`: defined
 - `TASKS.md`: defined
 - app scaffold: completed
-- provider integrations: not started
-- gameplay implementation: in progress
+- provider integrations: completed for backend attempt processing and frontend live submission wiring
+- gameplay implementation: in progress, with Phase 1 Agent 5 copy deliverables completed and Phase 2 restart/replay wiring now in place

@@ -1,4 +1,4 @@
-import { levels } from "@/content";
+import { levels, uiCopy } from "@/content";
 import type { ActiveLevelScreenState } from "@/lib/game";
 
 interface MockActiveLevelStateOptions {
@@ -70,15 +70,15 @@ const mockResultPreviewByLevel = {
 const mockFailurePreviewByLevel = {
   1: {
     strongestAttemptScore: 68,
-    summary: "The closest attempt already landed the warm studio still-life setup. A restart should focus on tighter object spacing and cleaner composition.",
+    summary: "Your best try already found the warm studio still life. On the restart, tighten the object spacing and composition.",
   },
   2: {
     strongestAttemptScore: 59,
-    summary: "The best attempt got close on mood, but the alley context and framing stayed too loose to pass. Restarting should sharpen those scene cues earlier.",
+    summary: "Your best try found the mood. On the restart, lock the alley setting and framing in sooner.",
   },
   3: {
     strongestAttemptScore: 69,
-    summary: "The strongest attempt nearly cleared the threshold, but the architectural composition still drifted. A restart should lock in the arch rhythm and era detail.",
+    summary: "Your best try nearly passed. On the restart, pin down the arch rhythm and era details.",
   },
 } as const;
 
@@ -120,12 +120,12 @@ function getMockSummaryPreview() {
   const lastCompletedLevel = bestScores[bestScores.length - 1];
   const improvementDelta =
     firstCompletedLevel && lastCompletedLevel ? lastCompletedLevel.bestScore - firstCompletedLevel.bestScore : 0;
-  const improvementSummary =
-    bestScores.length > 1 && firstCompletedLevel && lastCompletedLevel
-      ? `You finished ${Math.abs(improvementDelta)} points ${
-          improvementDelta >= 0 ? "stronger" : "lower"
-        } on ${lastCompletedLevel.levelTitle} than on ${firstCompletedLevel.levelTitle}.`
-      : "You cleared the opening run. Replay the level to sharpen the score even further.";
+  const improvementSummary = uiCopy.gameplay.summary.buildImprovementSummary(
+    improvementDelta,
+    firstCompletedLevel?.levelTitle ?? null,
+    lastCompletedLevel?.levelTitle ?? null,
+    bestScores.length,
+  );
 
   return {
     levelsCompleted: bestScores.length,
@@ -133,7 +133,7 @@ function getMockSummaryPreview() {
     bestScores,
     improvementDelta,
     improvementSummary,
-    encouragement: "Replay a cleared level now, or come back when the next content pack lands.",
+    encouragement: uiCopy.gameplay.summary.encouragement,
   };
 }
 

@@ -1,4 +1,4 @@
-import { levels } from "@/content";
+import { levels, uiCopy } from "@/content";
 import type { LandingExperienceState } from "@/lib/game";
 
 interface MockLandingStateOptions {
@@ -21,7 +21,7 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
         levelsCleared: 0,
         attemptsRemaining: 0,
         bestScore: null,
-        helperText: "Resume appears here after your first scored attempt.",
+        helperText: uiCopy.landing.resume.unavailableHelper,
       },
     };
   }
@@ -42,7 +42,7 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
       levelsCleared: 1,
       attemptsRemaining: currentLevel.maxAttempts - 1,
       bestScore: 54,
-      helperText: "Pick up the same run without replaying the opening level.",
+      helperText: uiCopy.landing.resume.inProgressHelper,
     },
   };
 }
