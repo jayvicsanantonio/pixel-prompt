@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useRef } from "react";
+import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT, type LandingExperienceState, type Level } from "@/lib/game";
 import styles from "./landing-screen.module.css";
 
@@ -23,9 +27,64 @@ const learningSteps = [
 ] as const;
 
 export function LandingScreen({ landingState, levels }: LandingScreenProps) {
+  const hasTrackedLandingView = useRef(false);
   const resumeLabel = landingState.resume.available
     ? `Resume Level ${landingState.resume.currentLevelNumber}`
     : "Resume saved run";
+
+  useEffect(() => {
+    if (hasTrackedLandingView.current) {
+      return;
+    }
+
+    hasTrackedLandingView.current = true;
+    const occurredAt = new Date().toISOString();
+
+    captureClientAnalyticsEvent({
+      name: "landing_viewed",
+      occurredAt,
+    });
+
+    if (landingState.resume.available) {
+      captureClientAnalyticsEvent({
+        name: "resume_offered",
+        occurredAt,
+        runId: landingState.resume.runId,
+        levelId: landingState.resume.currentLevelId,
+        levelNumber: landingState.resume.currentLevelNumber,
+        highestUnlockedLevelNumber: landingState.resume.highestUnlockedLevelNumber,
+      });
+    }
+  }, [landingState.resume]);
+
+  function handleStartClick() {
+    captureClientAnalyticsEvent({
+      name: "game_started",
+      occurredAt: new Date().toISOString(),
+      entry: "new",
+    });
+  }
+
+  function handleResumeClick() {
+    if (!landingState.resume.available) {
+      return;
+    }
+
+    const occurredAt = new Date().toISOString();
+
+    captureClientAnalyticsEvent({
+      name: "game_started",
+      occurredAt,
+      runId: landingState.resume.runId,
+      entry: "resume",
+    });
+    captureClientAnalyticsEvent({
+      name: "resume_started",
+      occurredAt,
+      runId: landingState.resume.runId,
+      currentLevelId: landingState.resume.currentLevelId,
+    });
+  }
 
   return (
     <main className={styles.page}>
@@ -52,7 +111,7 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
                 First-time players get the premise in one screen and can jump straight into the opening challenge.
               </p>
               <div className={styles.buttonRow}>
-                <Link className={styles.primaryAction} href={landingState.startHref}>
+                <Link className={styles.primaryAction} href={landingState.startHref} onClick={handleStartClick}>
                   Start Game
                 </Link>
               </div>
@@ -84,7 +143,7 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
               </div>
               <div className={styles.buttonRow}>
                 {landingState.resume.available ? (
-                  <Link className={styles.secondaryAction} href={landingState.resume.href}>
+                  <Link className={styles.secondaryAction} href={landingState.resume.href} onClick={handleResumeClick}>
                     {resumeLabel}
                   </Link>
                 ) : (

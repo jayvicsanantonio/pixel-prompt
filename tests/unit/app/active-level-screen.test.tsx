@@ -1,5 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { captureClientAnalyticsEvent } = vi.hoisted(() => ({
+  captureClientAnalyticsEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/analytics/client", () => ({
+  captureClientAnalyticsEvent,
+}));
+
 import { ActiveLevelScreen } from "@/components/game/active-level-screen";
 import { levels } from "@/content";
 import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
@@ -7,6 +16,7 @@ import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
 describe("ActiveLevelScreen", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    captureClientAnalyticsEvent.mockReset();
   });
 
   it("renders level metadata, attempts, and the target image study area", () => {
@@ -18,6 +28,13 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "A sunlit still life arranged on a wooden table." })).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-mock",
+        levelId: "level-1",
+      }),
+    );
   });
 
   it("updates the character counter as the player types", () => {
@@ -639,6 +656,8 @@ describe("ActiveLevelScreen", () => {
     const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
     render(<ActiveLevelScreen state={exhaustedState} restartLevelEndpoint="/api/game/restart-level" />);
 
+    captureClientAnalyticsEvent.mockClear();
+
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
     fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
@@ -654,6 +673,20 @@ describe("ActiveLevelScreen", () => {
     expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
     expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toHaveValue("");
+    expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([
+      "level_restarted",
+      "level_started",
+    ]);
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        name: "level_restarted",
+        runId: "run-1",
+        levelId: "level-2",
+        priorAttemptsUsed: 2,
+        bestScoreBeforeRestart: 59,
+      }),
+    );
   });
 
   it("replays a cleared level from the summary through the live replay endpoint", async () => {

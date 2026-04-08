@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MOCK_IMAGE_PNG_BASE64,
+  MOCK_PROVIDER_PROMPT_MARKERS,
   createMockImageGenerationProvider,
   getImageGenerationProvider,
   OpenAiImageGenerationProvider,
@@ -85,6 +86,29 @@ describe("image generation providers", () => {
     const generatedOutput = await readGeneratedOutput(result.assetKey);
 
     expect(generatedOutput.length).toBeGreaterThan(0);
+  });
+
+  it("returns a deterministic rate-limit failure from the mock provider", async () => {
+    const provider = createMockImageGenerationProvider();
+
+    const result = await provider.generateImage({
+      prompt: `sunlit pears on a table ${MOCK_PROVIDER_PROMPT_MARKERS.generationRateLimit}`,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-rate-limit",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "rate_limited",
+      code: "mock_generation_rate_limit",
+      message: "The mock generation fixture was rate-limited before returning an image.",
+      retryable: true,
+      consumeAttempt: false,
+    });
   });
 
   it("stores successful OpenAI generations in the generated output store", async () => {
@@ -180,6 +204,49 @@ describe("image generation providers", () => {
       code: "content_policy_violation",
       message: "Request rejected by safety policy.",
       retryable: false,
+      consumeAttempt: false,
+    });
+  });
+
+  it("maps OpenAI 429 responses to rate-limited failures", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "rate_limit_exceeded",
+            message: "Too many image generation requests.",
+            type: "rate_limit_error",
+          },
+        }),
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const provider = new OpenAiImageGenerationProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+    });
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-429",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "rate_limited",
+      code: "rate_limit_exceeded",
+      message: "Too many image generation requests.",
+      retryable: true,
       consumeAttempt: false,
     });
   });

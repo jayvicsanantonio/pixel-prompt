@@ -484,14 +484,14 @@ Primary owners:
 
 Tasks:
 
-- implement final completion summary with levels completed, attempts used, best scores, and improvement trend
+- [x] implement final completion summary with levels completed, attempts used, best scores, and improvement trend
 - implement multi-level progression with unlocks and replay of completed levels
 - ensure failed levels offer a restart path without soft-locking progression
 - surface replay entry points without regressing unlocked progression
-- validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
-- ensure analytics cover the full gameplay funnel and the PRD-defined success metrics
+- [x] validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
+- [x] ensure analytics cover the full gameplay funnel and the PRD-defined success metrics
 - tune thresholds and tip rules across the initial curated level set
-- add failure handling for generation, scoring, asset-display, network, and provider rate-limit issues
+- [x] add failure handling for generation, scoring, asset-display, network, and provider rate-limit issues
 - run structured QA across the full level set, including nonsensical-but-valid prompts and scoring inconsistency reviews
 
 Exit criteria:

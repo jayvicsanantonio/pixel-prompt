@@ -68,6 +68,17 @@ export class MockImageGenerationProvider implements ImageGenerationProvider {
       };
     }
 
+    if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationRateLimit)) {
+      return {
+        ok: false,
+        kind: "rate_limited",
+        code: "mock_generation_rate_limit",
+        message: "The mock generation fixture was rate-limited before returning an image.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
+
     if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.timeout)) {
       return {
         ok: false,

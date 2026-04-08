@@ -24,11 +24,14 @@ describe("getMockLandingState", () => {
       resume: {
         available: true,
         href: "/play?level=2&resume=1",
+        currentLevelId: "level-2",
         currentLevelNumber: 2,
         currentLevelTitle: "Midnight Alley Portrait",
         levelsCleared: 1,
         attemptsRemaining: 2,
         bestScore: 54,
+        highestUnlockedLevelNumber: 2,
+        runId: "run-mock",
         helperText: "Pick up the same run without replaying cleared progress.",
       },
     });

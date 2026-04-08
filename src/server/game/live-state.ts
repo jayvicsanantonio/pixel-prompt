@@ -91,6 +91,12 @@ export function buildLiveActiveLevelState(input: {
     attemptsUsed,
     attemptsRemaining,
     promptDraft,
+    analytics: input.session
+      ? {
+          anonymousPlayerId: input.session.progress.playerId,
+          runId: input.session.progress.runId,
+        }
+      : undefined,
     resultPreview: buildResultPreview(selectedLevel, resultAttempt),
     continuation: buildContinuationPreview(selectedLevel, attemptsRemaining),
     failurePreview: buildFailurePreview({

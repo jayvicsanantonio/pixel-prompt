@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MOCK_IMAGE_PNG_BASE64,
+  MOCK_PROVIDER_PROMPT_MARKERS,
   createMockImageScoringProvider,
   OpenAiImageScoringProvider,
   persistGeneratedOutput,
@@ -78,6 +79,34 @@ describe("image scoring providers", () => {
       score: {
         passed: true,
       },
+    });
+  });
+
+  it("returns a deterministic rate-limit failure from the mock scoring provider", async () => {
+    const provider = createMockImageScoringProvider();
+    const result = await provider.scoreImageMatch({
+      prompt: `sunlit still life ${MOCK_PROVIDER_PROMPT_MARKERS.scoringRateLimit}`,
+      generatedImageAssetKey: "generated/mock/level-1/attempt-rate-limit.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 50,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-rate-limit",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "rate_limited",
+      code: "mock_scoring_rate_limit",
+      message: "The mock scoring fixture was rate-limited before returning a score.",
+      retryable: true,
+      consumeAttempt: false,
     });
   });
 
@@ -345,6 +374,59 @@ describe("image scoring providers", () => {
       kind: "timeout",
       code: "openai_scoring_timeout",
       message: "OpenAI image scoring timed out before returning a score.",
+      retryable: true,
+      consumeAttempt: false,
+    });
+  });
+
+  it("maps OpenAI 429 responses to rate-limited failures", async () => {
+    await persistGeneratedOutput({
+      assetKey: "generated/openai/level-1/attempt-429.png",
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "rate_limit_exceeded",
+            message: "Too many scoring requests.",
+            type: "rate_limit_error",
+          },
+        }),
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const provider = new OpenAiImageScoringProvider({
+      apiKey: "sk-test",
+      fetchImpl,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life of pears and a bottle on a wooden table",
+      generatedImageAssetKey: "generated/openai/level-1/attempt-429.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-429",
+        attemptNumber: 7,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "rate_limited",
+      code: "rate_limit_exceeded",
+      message: "Too many scoring requests.",
       retryable: true,
       consumeAttempt: false,
     });

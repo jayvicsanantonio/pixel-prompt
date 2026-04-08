@@ -37,11 +37,14 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
     resume: {
       available: true,
       href: `/play?level=${currentLevel.number}&resume=1`,
+      currentLevelId: currentLevel.id,
       currentLevelNumber: currentLevel.number,
       currentLevelTitle: currentLevel.title,
       levelsCleared: 1,
       attemptsRemaining: currentLevel.maxAttempts - 1,
       bestScore: 54,
+      highestUnlockedLevelNumber: currentLevel.number,
+      runId: "run-mock",
       helperText: uiCopy.landing.resume.inProgressHelper,
     },
   };

@@ -164,6 +164,10 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
       attemptsUsed,
       attemptsRemaining,
       promptDraft: "cinematic neon portrait in a wet alley at midnight",
+      analytics: {
+        anonymousPlayerId: "player-mock",
+        runId: "run-mock",
+      },
       resultPreview,
       continuation,
       failurePreview,
@@ -176,6 +180,10 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
     attemptsUsed,
     attemptsRemaining,
     promptDraft: "",
+    analytics: {
+      anonymousPlayerId: "player-mock",
+      runId: "run-mock",
+    },
     resultPreview,
     continuation,
     failurePreview,

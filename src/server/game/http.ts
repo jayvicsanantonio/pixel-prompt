@@ -9,6 +9,7 @@ import {
   buildLandingExperience,
   recordAttempt,
   replayLevel,
+  resolveActiveLevel,
   resolveResumeLevel,
   restartFailedLevel,
   type GameSessionSnapshot,
@@ -89,9 +90,9 @@ function resolveSubmissionPreparation(input: {
   session: Awaited<ReturnType<typeof getOrCreateSession>>["session"];
   sessionToken: string;
 }) {
-  const activeLevel = resolveResumeLevel(input.session.progress, levels);
+  const activeLevel = resolveActiveLevel(input.session.progress, levels);
 
-  if (!activeLevel || input.session.progress.currentLevelId == null) {
+  if (!activeLevel) {
     throw new Error("No active level is available for submission.");
   }
 
@@ -603,9 +604,9 @@ export async function handleSubmitAttempt(request: Request) {
     );
   }
 
-  const currentLevel = existingSession ? resolveResumeLevel(existingSession.progress, levels) : (levels[0] ?? null);
+  const currentLevel = existingSession ? resolveActiveLevel(existingSession.progress, levels) : (levels[0] ?? null);
 
-  if (!currentLevel || (existingSession && existingSession.progress.currentLevelId == null)) {
+  if (!currentLevel) {
     return Response.json(
       {
         ok: false,
