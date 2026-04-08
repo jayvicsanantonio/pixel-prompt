@@ -87,6 +87,7 @@ function buildLiveScreenState(input: {
       restartLevelHref: `/play?level=${attemptedLevel.number}`,
     },
     failurePreview: {
+      // Preserve the previously known strongest score if the live response omits it during a client-side transition.
       ...buildFailurePreview({
         level: attemptedLevel,
         attempt: input.attempt,

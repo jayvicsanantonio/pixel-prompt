@@ -4,6 +4,10 @@ import { createGameSession, recordAttempt } from "@/server/game/session-state";
 import { buildLiveActiveLevelState } from "@/server/game/live-state";
 
 describe("buildLiveActiveLevelState", () => {
+  function toAttemptTimestamp(attemptNumber: number) {
+    return `2026-04-07T08:${String(attemptNumber).padStart(2, "0")}:00.000Z`;
+  }
+
   it("hydrates the current in-progress level from saved session data", () => {
     const session = createGameSession({
       playerId: "player-1",
@@ -73,7 +77,7 @@ describe("buildLiveActiveLevelState", () => {
         levelId: "level-1",
         attemptId: `attempt-${index + 1}`,
         promptText: `still life draft ${index + 1}`,
-        createdAt: `2026-04-07T08:0${index + 1}:00.000Z`,
+        createdAt: toAttemptTimestamp(index + 1),
         result: {
           status: "scored",
           outcome: "failed",
@@ -132,6 +136,51 @@ describe("buildLiveActiveLevelState", () => {
       level: {
         id: "level-1",
         number: 1,
+      },
+    });
+  });
+
+  it("falls back to the active resumable level when an older level is requested directly", () => {
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: "2026-04-07T08:00:00.000Z",
+    });
+    const passedLevelOneSession = recordAttempt({
+      session,
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-07T08:05:00.000Z",
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "mock",
+            model: "fixture",
+          },
+        },
+      },
+    }).session;
+
+    expect(
+      buildLiveActiveLevelState({
+        session: passedLevelOneSession,
+        requestedLevelNumber: 1,
+      }),
+    ).toMatchObject({
+      level: {
+        id: "level-2",
+        number: 2,
       },
     });
   });

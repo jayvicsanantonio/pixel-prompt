@@ -9,6 +9,7 @@ import {
 } from "@/lib/game/screen-state";
 import { resolveResumeLevel, type GameSessionSnapshot } from "@/server/game/session-state";
 
+/** Looks up a level by number for query-string bootstrap requests. */
 function findLevelByNumber(levelNumber: number | undefined) {
   if (levelNumber == null) {
     return null;
@@ -17,6 +18,7 @@ function findLevelByNumber(levelNumber: number | undefined) {
   return levels.find((level) => level.number === levelNumber) ?? null;
 }
 
+/** Chooses the only level that the current run can safely submit against on first render. */
 function getSelectedLevel(input: {
   requestedLevelNumber?: number;
   preferResume: boolean;
@@ -36,19 +38,14 @@ function getSelectedLevel(input: {
 
   const resumeLevel = resolveResumeLevel(input.session.progress, levels) ?? fallbackLevel;
 
-  if (input.preferResume || !requestedLevel) {
-    return resumeLevel;
-  }
-
-  const requestedLevelProgress = findLevelProgress(input.session.progress, requestedLevel.id);
-
-  if (!requestedLevelProgress || requestedLevelProgress.status === "locked") {
+  if (input.preferResume || !requestedLevel || requestedLevel.id !== resumeLevel.id) {
     return resumeLevel;
   }
 
   return requestedLevel;
 }
 
+/** Returns the latest attempt within the currently active attempt cycle for the level. */
 function getLatestAttempt(session: GameSessionSnapshot | null, level: Level, currentAttemptCycle?: number) {
   if (!session) {
     return null;
@@ -56,11 +53,12 @@ function getLatestAttempt(session: GameSessionSnapshot | null, level: Level, cur
 
   const attempts = session.attempts
     .filter((attempt) => attempt.levelId === level.id && (currentAttemptCycle == null || attempt.attemptCycle === currentAttemptCycle))
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    .sort((left, right) => (left.createdAt < right.createdAt ? -1 : left.createdAt > right.createdAt ? 1 : 0));
 
   return attempts[attempts.length - 1] ?? null;
 }
 
+/** Returns the stored strongest attempt for the level when one has been recorded. */
 function getStrongestAttempt(session: GameSessionSnapshot | null, strongestAttemptId?: string | null) {
   if (!session || !strongestAttemptId) {
     return null;
@@ -69,6 +67,7 @@ function getStrongestAttempt(session: GameSessionSnapshot | null, strongestAttem
   return session.attempts.find((attempt) => attempt.id === strongestAttemptId) ?? null;
 }
 
+/** Builds the initial client screen state for the live `/play` route from session-backed progress. */
 export function buildLiveActiveLevelState(input: {
   requestedLevelNumber?: number;
   preferResume?: boolean;

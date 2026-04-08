@@ -8,7 +8,7 @@ export interface PlayerFacingScore {
 
 export function toPlayerFacingScore(score: AttemptScore): PlayerFacingScore {
   return {
-    percentage: Math.round(score.normalized),
+    percentage: Math.floor(score.normalized),
     passed: score.passed,
     threshold: score.threshold,
   };
