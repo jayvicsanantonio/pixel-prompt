@@ -120,12 +120,12 @@ function getMockSummaryPreview() {
   const lastCompletedLevel = bestScores[bestScores.length - 1];
   const improvementDelta =
     firstCompletedLevel && lastCompletedLevel ? lastCompletedLevel.bestScore - firstCompletedLevel.bestScore : 0;
-  const improvementSummary =
-    bestScores.length > 1 && firstCompletedLevel && lastCompletedLevel
-      ? `You finished ${Math.abs(improvementDelta)} points ${
-          improvementDelta >= 0 ? "stronger" : "lower"
-        } on ${lastCompletedLevel.levelTitle} than on ${firstCompletedLevel.levelTitle}.`
-      : "You cleared the opening run. Replay the level to sharpen the score even further.";
+  const improvementSummary = uiCopy.gameplay.summary.buildImprovementSummary(
+    improvementDelta,
+    firstCompletedLevel?.levelTitle ?? null,
+    lastCompletedLevel?.levelTitle ?? null,
+    bestScores.length,
+  );
 
   return {
     levelsCompleted: bestScores.length,

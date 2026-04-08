@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { POST as postReplayLevel } from "@/app/api/game/replay-level/route";
+import { POST as postRestartLevel } from "@/app/api/game/restart-level/route";
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
@@ -25,6 +27,22 @@ function getSessionTokenFromCookieHeader(cookieHeader: string | null) {
 async function createSessionToken() {
   const { token } = await getOrCreateSession();
   return token;
+}
+
+async function submitAttempt(sessionToken: string, levelId: string, promptText: string) {
+  return postSubmitAttempt(
+    new Request("http://localhost/api/game/submit-attempt", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+      },
+      body: JSON.stringify({
+        levelId,
+        promptText,
+      }),
+    }),
+  );
 }
 
 describe("game http handlers", () => {
@@ -901,5 +919,99 @@ describe("game http handlers", () => {
     expect(duplicateBody.transition).toBe("passed");
     expect(duplicateBody.progress.totalAttemptsUsed).toBe(1);
     expect(duplicateBody.progress.currentLevelId).toBe("level-2");
+  });
+
+  it("restarts a failed level through the live progress mutation route", async () => {
+    const sessionToken = await createSessionToken();
+
+    for (let attemptIndex = 0; attemptIndex < 3; attemptIndex += 1) {
+      const response = await submitAttempt(sessionToken, "level-1", "vague");
+      expect(response.status).toBe(200);
+    }
+
+    const restartResponse = await postRestartLevel(
+      new Request("http://localhost/api/game/restart-level", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+        }),
+      }),
+    );
+    const restartBody = await restartResponse.json();
+
+    expect(restartResponse.status).toBe(200);
+    expect(restartBody).toMatchObject({
+      ok: true,
+      currentLevel: {
+        id: "level-1",
+        number: 1,
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 3,
+      },
+    });
+    expect(restartBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      status: "in_progress",
+      currentAttemptCycle: 2,
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+    });
+  });
+
+  it("replays a cleared level after run completion through the live progress mutation route", async () => {
+    const sessionToken = await createSessionToken();
+
+    const passingPrompts = [
+      ["level-1", "sunlit still life pears bottle wooden table warm"],
+      ["level-2", "cinematic neon portrait in a wet alley at midnight with urban signs"],
+      ["level-3", "ornate warm stone courtyard with layered arches and historical architecture"],
+    ] as const;
+
+    for (const [levelId, promptText] of passingPrompts) {
+      const response = await submitAttempt(sessionToken, levelId, promptText);
+      expect(response.status).toBe(200);
+    }
+
+    const replayResponse = await postReplayLevel(
+      new Request("http://localhost/api/game/replay-level", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-3",
+        }),
+      }),
+    );
+    const replayBody = await replayResponse.json();
+
+    expect(replayResponse.status).toBe(200);
+    expect(replayBody).toMatchObject({
+      ok: true,
+      currentLevel: {
+        id: "level-3",
+        number: 3,
+      },
+      progress: {
+        currentLevelId: "level-3",
+        highestUnlockedLevelNumber: 3,
+        totalAttemptsUsed: 3,
+      },
+    });
+    expect(replayBody.progress.levels[2]).toMatchObject({
+      levelId: "level-3",
+      status: "in_progress",
+      currentAttemptCycle: 2,
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+      completedAt: expect.any(String),
+    });
   });
 });

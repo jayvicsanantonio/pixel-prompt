@@ -666,5 +666,5 @@ The first concrete tasks for the repo should be:
 - `README.md`: defined
 - `TASKS.md`: defined
 - app scaffold: completed
-- provider integrations: completed for backend attempt processing, with frontend live wiring still pending in Phase 2
-- gameplay implementation: in progress, with remaining Phase 1 Agent 5 copy deliverables still open
+- provider integrations: completed for backend attempt processing and frontend live submission wiring
+- gameplay implementation: in progress, with Phase 1 Agent 5 copy deliverables completed and Phase 2 restart/replay wiring now in place

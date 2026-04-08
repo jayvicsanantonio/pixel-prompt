@@ -103,6 +103,8 @@ export const uiCopy = {
       nextState: "Next State",
       nextStateValue: "Result",
       helper: "Keep the target visible so you can compare as soon as the result is ready.",
+      pendingCta: "Result incoming",
+      workingCta: "Working...",
       revealCta: "Reveal Result",
       backCta: "Back to Prompt",
     },
@@ -127,6 +129,15 @@ export const uiCopy = {
       generatedImageEyebrow: "Generated Image",
       generatedImageTitle: "Match preview",
       generatedImageHelper: "Keep the target on the left and compare the biggest differences first.",
+      generatedImageAlt(promptText: string) {
+        return `Generated image preview for prompt: ${promptText}.`;
+      },
+      scoreUnavailable: "The attempt could not be scored.",
+      buildResolvedSummary(score: number, threshold: number, passed: boolean) {
+        return passed
+          ? `Score ${score}% cleared the ${threshold}% pass score.`
+          : `Score ${score}% missed the ${threshold}% pass score. Tighten the prompt and try again.`;
+      },
       successCta: "See Success Options",
       retryCta: "See Retry Options",
       failureCta: "See Failure State",
@@ -185,8 +196,12 @@ export const uiCopy = {
       threshold: "Threshold",
       lastResult: "Last Result",
       attemptsLeft: "Attempts Left",
+      lastSubmittedPrompt: "Last Submitted Prompt",
       contextEyebrow: "Strongest Attempt Context",
       contextTitle: "What to carry into the restart",
+      buildFallbackSummary(strongestAttemptScore: number, levelNumber: number) {
+        return `Best score ${strongestAttemptScore}% on Level ${levelNumber}. Restart and tighten the biggest visual differences.`;
+      },
       restartCta: "Restart Level",
       reviewCta: "Review Result Again",
     },
@@ -204,6 +219,15 @@ export const uiCopy = {
       replayHelper: "Pick a cleared level and push the score higher, or come back when the next pack arrives.",
       nextReturn: "Next Return",
       encouragement: "Replay a cleared level now, or come back when the next pack lands.",
+      buildImprovementSummary(improvementDelta: number, firstTitle: string | null, lastTitle: string | null, completedLevels: number) {
+        if (!firstTitle || !lastTitle || completedLevels <= 1) {
+          return "You cleared the opening run. Replay a level to push the score higher.";
+        }
+
+        return `You finished ${Math.abs(improvementDelta)} points ${
+          improvementDelta >= 0 ? "stronger" : "lower"
+        } on ${lastTitle} than on ${firstTitle}.`;
+      },
       buildReplayMeta(bestScore: number, attemptsUsed: number) {
         return `Best score ${bestScore}% in ${attemptsUsed} scored ${pluralize(attemptsUsed, "attempt")}.`;
       },
@@ -212,6 +236,11 @@ export const uiCopy = {
       },
       replayFinalCta: "Replay Final Level",
       backCta: "Back to Landing",
+    },
+    errors: {
+      attemptIncomplete: "The attempt could not be completed. Try again.",
+      submitFailed: "The attempt could not be submitted. Try again.",
+      actionFailed: "The level action could not be completed. Try again.",
     },
   },
 } as const;

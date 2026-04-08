@@ -285,7 +285,7 @@ describe("ActiveLevelScreen", () => {
       target: { value: "sunlit pears and a green bottle on a wooden table" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
 
     expect(screen.getByText("Compare the target against your generated match")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("68%");
@@ -307,7 +307,7 @@ describe("ActiveLevelScreen", () => {
       target: { value: "sunlit pears and a green bottle on a wooden table" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
 
     expect(screen.getByText("Carry the momentum into the next image")).toBeInTheDocument();
@@ -324,7 +324,7 @@ describe("ActiveLevelScreen", () => {
       target: { value: "sunlit pears and a green bottle on a wooden table" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
     fireEvent.click(screen.getByRole("button", { name: "Replay This Level" }));
 
@@ -337,7 +337,7 @@ describe("ActiveLevelScreen", () => {
     render(<ActiveLevelScreen state={resumedState} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Retry Options" }));
 
     expect(screen.getByText("Take another pass while the comparison is still fresh")).toBeInTheDocument();
@@ -359,7 +359,7 @@ describe("ActiveLevelScreen", () => {
       target: { value: "ornate stone courtyard with warm light and repeating arches" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
 
     expect(screen.getByRole("button", { name: "View Final Summary" })).toBeInTheDocument();
@@ -386,7 +386,7 @@ describe("ActiveLevelScreen", () => {
     render(<ActiveLevelScreen state={exhaustedState} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Mock Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
 
     expect(screen.getByText("The best try stays with you")).toBeInTheDocument();
@@ -400,6 +400,210 @@ describe("ActiveLevelScreen", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Restart Level" })).toHaveAttribute("href", "/play?level=2");
     expect(screen.getByRole("button", { name: "Review Result Again" })).toBeInTheDocument();
+  });
+
+  it("restarts a failed level through the live restart endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 3,
+              bestScore: 59,
+              helperText: "Pick up the same run without replaying cleared progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 2,
+            totalAttemptsUsed: 3,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:10:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "in_progress",
+                currentAttemptCycle: 2,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: 59,
+                strongestAttemptId: "attempt-live-2",
+                unlockedAt: "2026-04-07T08:05:00.000Z",
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: "2026-04-07T08:10:00.000Z",
+              },
+              {
+                levelId: "level-3",
+                status: "locked",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: null,
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
+    render(<ActiveLevelScreen state={exhaustedState} restartLevelEndpoint="/api/game/restart-level" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart Level" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/game/restart-level",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+
+    expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("");
+  });
+
+  it("replays a cleared level from the summary through the live replay endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 3,
+              bestScore: 63,
+              helperText: "Replay any cleared level without losing your unlocked progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 3,
+            totalAttemptsUsed: 4,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:15:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "in_progress",
+                currentAttemptCycle: 2,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: 63,
+                strongestAttemptId: "attempt-live-4",
+                unlockedAt: "2026-04-07T08:05:00.000Z",
+                completedAt: "2026-04-07T08:05:00.000Z",
+                lastCompletedAt: "2026-04-07T08:05:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:15:00.000Z",
+              },
+              {
+                levelId: "level-3",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 78,
+                strongestAttemptId: "attempt-live-5",
+                unlockedAt: "2026-04-07T08:10:00.000Z",
+                completedAt: "2026-04-07T08:10:00.000Z",
+                lastCompletedAt: "2026-04-07T08:10:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:10:00.000Z",
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const finalLevelState = getMockActiveLevelState({ levelNumber: 3 });
+    render(<ActiveLevelScreen state={finalLevelState} replayLevelEndpoint="/api/game/replay-level" />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "ornate stone courtyard with warm light and repeating arches" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Success Options" }));
+    fireEvent.click(screen.getByRole("button", { name: "View Final Summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "Replay Level 2" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/game/replay-level",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+
+    expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("");
   });
 
   it("syncs the draft and resets local UI state when the parent provides a different level", () => {

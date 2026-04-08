@@ -5,7 +5,15 @@ import type { AnalyticsEvent } from "@/lib/analytics";
 import { captureServerAnalyticsEvents } from "@/server/analytics";
 import { levels } from "@/content";
 import type { Level } from "@/lib/game";
-import { buildLandingExperience, recordAttempt, resolveResumeLevel, type RecordAttemptResult } from "@/server/game/session-state";
+import {
+  buildLandingExperience,
+  recordAttempt,
+  replayLevel,
+  resolveResumeLevel,
+  restartFailedLevel,
+  type GameSessionSnapshot,
+  type RecordAttemptResult,
+} from "@/server/game/session-state";
 import type { ProviderFailure, ProviderModelRef } from "@/server/providers";
 import { getImageGenerationProvider, getImageScoringProvider } from "@/server/providers";
 
@@ -240,26 +248,216 @@ type SubmitAttemptOutcome =
       };
     };
 
-function buildSubmitAttemptResponse(sessionToken: string | undefined, attemptResult: RecordAttemptResult) {
-  const response = Response.json({
-    ok: true,
-    transition: attemptResult.transition,
-    attempt: sanitizeAttemptForResponse(attemptResult.attempt),
-    currentLevel: resolveResumeLevel(attemptResult.session.progress, levels),
-    landing: buildLandingExperience(attemptResult.session, levels),
-    progress: attemptResult.session.progress,
-  });
+function appendSessionCookie(response: Response, sessionToken: string | undefined) {
+  if (!sessionToken) {
+    return response;
+  }
 
-  if (sessionToken) {
-    response.headers.append(
-      "set-cookie",
-      `${getSessionCookieAttributes().name}=${sessionToken}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
-        getSessionCookieAttributes().secure ? "; Secure" : ""
-      }`,
+  response.headers.append(
+    "set-cookie",
+    `${getSessionCookieAttributes().name}=${sessionToken}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
+      getSessionCookieAttributes().secure ? "; Secure" : ""
+    }`,
+  );
+
+  return response;
+}
+
+function buildSubmitAttemptResponse(sessionToken: string | undefined, attemptResult: RecordAttemptResult) {
+  return appendSessionCookie(
+    Response.json({
+      ok: true,
+      transition: attemptResult.transition,
+      attempt: sanitizeAttemptForResponse(attemptResult.attempt),
+      currentLevel: resolveResumeLevel(attemptResult.session.progress, levels),
+      landing: buildLandingExperience(attemptResult.session, levels),
+      progress: attemptResult.session.progress,
+    }),
+    sessionToken,
+  );
+}
+
+function buildProgressMutationResponse(sessionToken: string | undefined, session: GameSessionSnapshot) {
+  return appendSessionCookie(
+    Response.json({
+      ok: true,
+      currentLevel: resolveResumeLevel(session.progress, levels),
+      landing: buildLandingExperience(session, levels),
+      progress: session.progress,
+    }),
+    sessionToken,
+  );
+}
+
+async function parseJsonObjectRequest(request: Request) {
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_json",
+        message: "The request body must be valid JSON.",
+      },
+      {
+        status: 400,
+      },
     );
   }
 
-  return response;
+  if (typeof rawBody !== "object" || rawBody === null || Array.isArray(rawBody)) {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_request",
+        message: "Request body must be a JSON object.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
+  return rawBody as Record<string, unknown>;
+}
+
+async function parseLevelMutationRequest(request: Request) {
+  const parsedBody = await parseJsonObjectRequest(request);
+
+  if (parsedBody instanceof Response) {
+    return parsedBody;
+  }
+
+  const { levelId } = parsedBody;
+
+  if (typeof levelId !== "string") {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_request",
+        message: "levelId is required.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
+  const requestedLevel = levels.find((level) => level.id === levelId);
+
+  if (!requestedLevel) {
+    return Response.json(
+      {
+        ok: false,
+        code: "invalid_request",
+        message: "The request references an unknown level.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
+  return {
+    levelId,
+    sessionToken: getCookieValue(request, SESSION_COOKIE_NAME) ?? undefined,
+  };
+}
+
+function mapProgressMutationError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  if (error.message === 'Only failed levels can be restarted. Received "in_progress".') {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        code: "restart_unavailable",
+        message: error.message,
+      },
+    };
+  }
+
+  if (error.message === 'Only currently completed levels can be replayed. Received "in_progress".') {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        code: "replay_unavailable",
+        message: error.message,
+      },
+    };
+  }
+
+  if (error.message.startsWith("Only failed levels can be restarted.")) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        code: "restart_unavailable",
+        message: error.message,
+      },
+    };
+  }
+
+  if (error.message.startsWith("Only currently completed levels can be replayed.")) {
+    return {
+      status: 409,
+      body: {
+        ok: false,
+        code: "replay_unavailable",
+        message: error.message,
+      },
+    };
+  }
+
+  return null;
+}
+
+async function handleProgressMutation(
+  request: Request,
+  mutateProgress: (session: GameSessionSnapshot, levelId: string) => GameSessionSnapshot,
+) {
+  const parsedBody = await parseLevelMutationRequest(request);
+
+  if (parsedBody instanceof Response) {
+    return parsedBody;
+  }
+
+  if (!parsedBody.sessionToken) {
+    return Response.json(
+      {
+        ok: false,
+        code: "session_missing",
+        message: "A saved run is required before this action is available.",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  try {
+    const mutation = await mutateSession(parsedBody.sessionToken, (session) => ({
+      session: mutateProgress(session, parsedBody.levelId),
+      value: undefined,
+    }));
+
+    return buildProgressMutationResponse(mutation.token, mutation.session);
+  } catch (error) {
+    const mappedError = mapProgressMutationError(error);
+
+    if (mappedError) {
+      return Response.json(mappedError.body, {
+        status: mappedError.status,
+      });
+    }
+
+    throw error;
+  }
 }
 
 function buildSubmitAttemptOutcomeResponse(outcome: SubmitAttemptOutcome) {
@@ -291,21 +489,7 @@ export async function handleResumeProgress(request: Request) {
 
   scheduleAnalyticsCapture(buildResumeProgressAnalyticsEvents({ occurredAt, currentLevel, session }));
 
-  const response = Response.json({
-    ok: true,
-    landing: buildLandingExperience(session, levels),
-    currentLevel,
-    progress: session.progress,
-  });
-
-  response.headers.append(
-    "set-cookie",
-    `${getSessionCookieAttributes().name}=${sessionToken}; Max-Age=${getSessionCookieAttributes().maxAge}; Path=/; HttpOnly; SameSite=Lax${
-      getSessionCookieAttributes().secure ? "; Secure" : ""
-    }`,
-  );
-
-  return response;
+  return buildProgressMutationResponse(sessionToken, session);
 }
 
 export async function handleSubmitAttempt(request: Request) {
@@ -663,4 +847,12 @@ export async function handleSubmitAttempt(request: Request) {
   );
 
   return buildSubmitAttemptOutcomeResponse(submission);
+}
+
+export async function handleRestartLevel(request: Request) {
+  return handleProgressMutation(request, (session, levelId) => restartFailedLevel({ session, levelId }));
+}
+
+export async function handleReplayLevel(request: Request) {
+  return handleProgressMutation(request, (session, levelId) => replayLevel({ session, levelId }));
 }

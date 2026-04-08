@@ -20,6 +20,8 @@ export default async function PlayPage(props: PageProps<"/play">) {
       key={`${state.level.id}:${state.promptDraft}`}
       state={state}
       submissionEndpoint="/api/game/submit-attempt"
+      restartLevelEndpoint="/api/game/restart-level"
+      replayLevelEndpoint="/api/game/replay-level"
     />
   );
 }
