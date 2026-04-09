@@ -132,7 +132,6 @@ export function ActiveLevelScreen({
   replayLevelEndpoint,
 }: ActiveLevelScreenProps) {
   const [state, setState] = useState(initialState);
-  const [analytics, setAnalytics] = useState(initialState.analytics);
   const [promptText, setPromptText] = useState(initialState.promptDraft);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [screenMode, setScreenMode] = useState<
@@ -155,20 +154,24 @@ export function ActiveLevelScreen({
   const hasRetryRemaining = state.continuation.attemptsRemainingAfterResult > 0;
 
   const buildLevelStartedKey = useCallback(
-    (level: Level, analyticsOverride?: typeof analytics) =>
-      `${analyticsOverride?.runId ?? analytics?.runId ?? "anon"}:${level.id}:${level.number}`,
-    [analytics?.runId],
+    (level: Level, analyticsOverride?: ActiveLevelScreenState["analytics"]) =>
+      `${analyticsOverride?.runId ??
+        state.analytics?.runId ??
+        analyticsOverride?.anonymousPlayerId ??
+        state.analytics?.anonymousPlayerId ??
+        "anon"}:${level.id}:${level.number}`,
+    [state.analytics?.anonymousPlayerId, state.analytics?.runId],
   );
 
   const emitLevelStarted = useCallback(
-    (level: Level, analyticsOverride?: typeof analytics, occurredAt = new Date().toISOString()) => {
+    (level: Level, analyticsOverride?: ActiveLevelScreenState["analytics"], occurredAt = new Date().toISOString()) => {
       captureClientAnalyticsEvent({
         name: "level_started",
         occurredAt,
-        anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? analytics?.anonymousPlayerId,
-        ...(analyticsOverride?.runId ?? analytics?.runId
+        anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? state.analytics?.anonymousPlayerId,
+        ...(analyticsOverride?.runId ?? state.analytics?.runId
           ? {
-              runId: analyticsOverride?.runId ?? analytics?.runId,
+              runId: analyticsOverride?.runId ?? state.analytics?.runId,
             }
           : {}),
         levelId: level.id,
@@ -178,7 +181,7 @@ export function ActiveLevelScreen({
       });
       lastStartedLevelKeyRef.current = buildLevelStartedKey(level, analyticsOverride);
     },
-    [analytics?.anonymousPlayerId, analytics?.runId, buildLevelStartedKey],
+    [buildLevelStartedKey, state.analytics?.anonymousPlayerId, state.analytics?.runId],
   );
 
   async function mutateLevelProgress(endpoint: string | undefined, levelId: string) {
@@ -210,16 +213,18 @@ export function ActiveLevelScreen({
       setValidationMessage(null);
       setSubmittedPrompt("");
       setPromptText("");
-      setAnalytics({
-        anonymousPlayerId: body.progress.playerId,
-        runId: body.progress.runId,
-      });
       setState((previousState) =>
-        buildResetScreenState({
-          previousState,
-          currentLevel,
-          progress: body.progress,
-        }),
+        ({
+          ...buildResetScreenState({
+            previousState,
+            currentLevel,
+            progress: body.progress,
+          }),
+          analytics: {
+            anonymousPlayerId: body.progress.playerId,
+            runId: body.progress.runId,
+          },
+        }) satisfies ActiveLevelScreenState,
       );
       const occurredAt = new Date().toISOString();
 
@@ -256,8 +261,15 @@ export function ActiveLevelScreen({
   }
 
   useEffect(() => {
-    setAnalytics(initialState.analytics);
-  }, [initialState.analytics]);
+    setState(initialState);
+    setPromptText(initialState.promptDraft);
+    setSubmittedPrompt(initialState.promptDraft);
+    setValidationMessage(null);
+    setScreenMode(initialState.initialScreenMode ?? "active");
+    setIsSubmitting(false);
+    setIsTargetExpanded(false);
+    setIsTransitioningLevel(false);
+  }, [initialState]);
 
   useEffect(() => {
     if (!isTargetExpanded) {
@@ -398,18 +410,20 @@ export function ActiveLevelScreen({
       }
 
       setState((previousState) =>
-        buildLiveScreenState({
-          previousState,
-          transition: body.transition,
-          attempt: body.attempt,
-          progress: body.progress,
-          currentLevel: body.currentLevel,
-        }),
+        ({
+          ...buildLiveScreenState({
+            previousState,
+            transition: body.transition,
+            attempt: body.attempt,
+            progress: body.progress,
+            currentLevel: body.currentLevel,
+          }),
+          analytics: {
+            anonymousPlayerId: body.progress.playerId,
+            runId: body.progress.runId,
+          },
+        }) satisfies ActiveLevelScreenState,
       );
-      setAnalytics({
-        anonymousPlayerId: body.progress.playerId,
-        runId: body.progress.runId,
-      });
       setPromptText(trimmedPrompt);
       setScreenMode("result");
     } catch {

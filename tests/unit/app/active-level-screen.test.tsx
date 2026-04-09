@@ -48,6 +48,64 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("28/120 characters")).toBeInTheDocument();
   });
 
+  it("syncs the rendered level and analytics payload when the state prop changes", () => {
+    const { rerender } = render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    captureClientAnalyticsEvent.mockClear();
+
+    rerender(
+      <ActiveLevelScreen
+        state={{
+          ...getMockActiveLevelState({ levelNumber: 2, resume: true }),
+          promptDraft: "cinematic neon portrait framed by wet reflections",
+          analytics: {
+            anonymousPlayerId: "player-next",
+            runId: "run-next",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("cinematic neon portrait framed by wet reflections");
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-next",
+        levelId: "level-2",
+      }),
+    );
+  });
+
+  it("treats anonymous player changes as distinct level-start dedupe keys when no run exists", () => {
+    const initialAnonymousState = {
+      ...getMockActiveLevelState(),
+      analytics: {
+        anonymousPlayerId: "player-anon-a",
+      },
+    };
+    const nextAnonymousState = {
+      ...getMockActiveLevelState(),
+      analytics: {
+        anonymousPlayerId: "player-anon-b",
+      },
+    };
+    const { rerender } = render(<ActiveLevelScreen state={initialAnonymousState} />);
+
+    captureClientAnalyticsEvent.mockClear();
+    rerender(<ActiveLevelScreen state={nextAnonymousState} />);
+
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledTimes(1);
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        anonymousPlayerId: "player-anon-b",
+        levelId: "level-1",
+      }),
+    );
+    expect(captureClientAnalyticsEvent.mock.calls[0]?.[0]).not.toHaveProperty("runId");
+  });
+
   it("opens a larger target study view for closer inspection", () => {
     render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
 

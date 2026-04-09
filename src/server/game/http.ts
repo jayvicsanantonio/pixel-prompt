@@ -724,7 +724,10 @@ export async function handleSubmitAttempt(request: Request) {
             refreshedPreparation.attemptCycle !== preparation.attemptCycle ||
             refreshedPreparation.attemptNumber !== preparation.attemptNumber
           ) {
-            throw new Error("The current level changed while this submission was being processed.");
+            throw new SubmissionPreparationError(
+              "The current level changed while this submission was being processed.",
+              "level_changed",
+            );
           }
 
           const attemptResult = recordAttempt({

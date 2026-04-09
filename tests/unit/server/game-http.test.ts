@@ -8,7 +8,9 @@ import { POST as postRestartLevel } from "@/app/api/game/restart-level/route";
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
+import type { ImageGenerationProvider } from "@/server/providers/contracts";
 import { getOrCreateSession, mutateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+import * as imageGenerationProviderModule from "@/server/providers/image-generation";
 
 function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
@@ -99,6 +101,7 @@ describe("game http handlers", () => {
       process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = originalTargetAssetDir;
     }
 
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -945,6 +948,62 @@ describe("game http handlers", () => {
     await expect(blockedResponse.json()).resolves.toMatchObject({
       ok: false,
       code: "restart_required",
+    });
+  });
+
+  it("returns a level_changed conflict when the run changes during provider evaluation", async () => {
+    const sessionToken = await createSessionToken();
+    let resolveGenerationGate = () => {};
+    let markGenerationStarted = () => {};
+    const generationGate = new Promise<void>((resolve) => {
+      resolveGenerationGate = resolve;
+    });
+    const generationStarted = new Promise<void>((resolve) => {
+      markGenerationStarted = resolve;
+    });
+
+    vi.spyOn(imageGenerationProviderModule, "getImageGenerationProvider").mockReturnValue({
+      providerId: "delayed-mock-image",
+      modelRef: {
+        provider: "mock",
+        model: "delayed-mock-image",
+      },
+      async generateImage() {
+        markGenerationStarted();
+        await generationGate;
+
+        return {
+          ok: false,
+          kind: "technical_failure",
+          code: "delayed_mock_generation_failure",
+          message: "Delayed mock generation failure.",
+          retryable: true,
+          consumeAttempt: false,
+        };
+      },
+    } satisfies ImageGenerationProvider);
+
+    const responsePromise = submitAttempt(sessionToken, "level-1", "sunlit still life");
+
+    await generationStarted;
+    await mutateSession(sessionToken, (session) => ({
+      session: {
+        ...session,
+        progress: {
+          ...session.progress,
+          runId: "run-raced",
+        },
+      },
+      value: null,
+    }));
+    resolveGenerationGate();
+
+    const response = await responsePromise;
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      code: "level_changed",
     });
   });
 

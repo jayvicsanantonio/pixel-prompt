@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type MutableRefObject } from "react";
 import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT, type LandingExperienceState, type Level } from "@/lib/game";
 import styles from "./landing-screen.module.css";
@@ -25,6 +25,15 @@ const learningSteps = [
     body: "Each submission returns a match score, and failed attempts turn into guided practice instead of dead ends.",
   },
 ] as const;
+
+function sendOneShotAnalytics(flagRef: MutableRefObject<boolean>, emitEvents: (occurredAt: string) => void) {
+  if (flagRef.current) {
+    return;
+  }
+
+  flagRef.current = true;
+  emitEvents(new Date().toISOString());
+}
 
 export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   const hasTrackedLandingView = useRef(false);
@@ -60,41 +69,35 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   }, [landingState.resume]);
 
   function handleStartClick() {
-    if (hasTrackedStartClick.current) {
-      return;
-    }
-
-    hasTrackedStartClick.current = true;
-    captureClientAnalyticsEvent({
-      name: "game_started",
-      occurredAt: new Date().toISOString(),
-      entry: "new",
+    sendOneShotAnalytics(hasTrackedStartClick, (occurredAt) => {
+      captureClientAnalyticsEvent({
+        name: "game_started",
+        occurredAt,
+        entry: "new",
+      });
     });
   }
 
   function handleResumeClick() {
-    if (!landingState.resume.available) {
+    const resumeState = landingState.resume;
+
+    if (!resumeState.available) {
       return;
     }
 
-    if (hasTrackedResumeClick.current) {
-      return;
-    }
-
-    hasTrackedResumeClick.current = true;
-    const occurredAt = new Date().toISOString();
-
-    captureClientAnalyticsEvent({
-      name: "game_started",
-      occurredAt,
-      runId: landingState.resume.runId,
-      entry: "resume",
-    });
-    captureClientAnalyticsEvent({
-      name: "resume_started",
-      occurredAt,
-      runId: landingState.resume.runId,
-      currentLevelId: landingState.resume.currentLevelId,
+    sendOneShotAnalytics(hasTrackedResumeClick, (occurredAt) => {
+      captureClientAnalyticsEvent({
+        name: "game_started",
+        occurredAt,
+        runId: resumeState.runId,
+        entry: "resume",
+      });
+      captureClientAnalyticsEvent({
+        name: "resume_started",
+        occurredAt,
+        runId: resumeState.runId,
+        currentLevelId: resumeState.currentLevelId,
+      });
     });
   }
 
