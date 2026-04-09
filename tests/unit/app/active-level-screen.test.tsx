@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { captureClientAnalyticsEvent } = vi.hoisted(() => ({
@@ -22,12 +22,18 @@ describe("ActiveLevelScreen", () => {
   it("renders level metadata, attempts, and the target image study area", () => {
     render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
 
+    const levelOneProgress = screen.getByRole("article", { name: "Level 1 progression" });
+    const levelTwoProgress = screen.getByRole("article", { name: "Level 2 progression" });
+
     expect(screen.getByRole("link", { name: "Back to Landing" })).toHaveAttribute("href", "/");
     expect(screen.getByText("1. Sunlit Still Life")).toBeInTheDocument();
     expect(screen.getByText("50%")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "A sunlit still life arranged on a wooden table." })).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(within(levelOneProgress).getByText("Active")).toBeInTheDocument();
+    expect(within(levelOneProgress).getByText("Current Level")).toBeInTheDocument();
+    expect(within(levelTwoProgress).getAllByText("Locked")).not.toHaveLength(0);
     expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "level_started",
@@ -301,7 +307,13 @@ describe("ActiveLevelScreen", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
+    render(
+      <ActiveLevelScreen
+        state={getMockActiveLevelState()}
+        submissionEndpoint="/api/game/submit-attempt"
+        replayLevelEndpoint="/api/game/replay-level"
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "sunlit pears and a bottle on a wooden table" },
@@ -457,6 +469,148 @@ describe("ActiveLevelScreen", () => {
         "Call out the wet alley, neon signage, and late-night atmosphere directly so the portrait lands in the right environment.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("updates the progression rail when a cleared level unlocks the next level", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          transition: "passed",
+          attempt: {
+            id: "attempt-live-1",
+            runId: "run-1",
+            levelId: "level-1",
+            attemptCycle: 1,
+            attemptNumber: 1,
+            promptText: "sunlit pears and green bottle on a wooden table",
+            createdAt: "2026-04-07T08:00:00.000Z",
+            consumedAttempt: true,
+            generation: {
+              provider: "mock",
+              model: "mock-image",
+              assetKey: "generated/level-1/attempt-live-1.png",
+            },
+            result: {
+              status: "scored",
+              outcome: "passed",
+              strongestAttemptScore: 68,
+              tipIds: [],
+              score: {
+                raw: 0.68,
+                normalized: 68,
+                threshold: 50,
+                passed: true,
+                breakdown: {
+                  subject: 74,
+                },
+                scorer: {
+                  provider: "mock",
+                  model: "mock-scorer",
+                },
+              },
+            },
+          },
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelId: "level-2",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 3,
+              bestScore: 68,
+              highestUnlockedLevelNumber: 2,
+              runId: "run-1",
+              helperText: "Pick up the same run without replaying cleared progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 2,
+            totalAttemptsUsed: 1,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:00:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "in_progress",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+              {
+                levelId: "level-3",
+                status: "locked",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: null,
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ActiveLevelScreen
+        state={getMockActiveLevelState()}
+        submissionEndpoint="/api/game/submit-attempt"
+        replayLevelEndpoint="/api/game/replay-level"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "sunlit pears and green bottle on a wooden table" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("Compare the target against your generated match")).toBeInTheDocument();
+
+    const levelOneProgress = screen.getByRole("article", { name: "Level 1 progression" });
+    const levelTwoProgress = screen.getByRole("article", { name: "Level 2 progression" });
+
+    expect(within(levelOneProgress).getByText("Cleared")).toBeInTheDocument();
+    expect(within(levelOneProgress).getByRole("button", { name: "Replay Level 1" })).toBeInTheDocument();
+    expect(within(levelTwoProgress).getByText("Active")).toBeInTheDocument();
+    expect(within(levelTwoProgress).getByText("Current Level")).toBeInTheDocument();
   });
 
   it("surfaces server submission errors without clearing the draft", async () => {
@@ -623,12 +777,16 @@ describe("ActiveLevelScreen", () => {
           ...getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 3 }),
           initialScreenMode: "failure",
         }}
+        restartLevelEndpoint="/api/game/restart-level"
       />,
     );
+
+    const levelTwoProgress = screen.getByRole("article", { name: "Level 2 progression" });
 
     expect(screen.getByText("The best try stays with you")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("59%");
     expect(screen.getByText("cinematic neon portrait in a wet alley at midnight")).toBeInTheDocument();
+    expect(within(levelTwoProgress).getByRole("button", { name: "Restart Level" })).toBeInTheDocument();
   });
 
   it("restarts a failed level through the live restart endpoint", async () => {

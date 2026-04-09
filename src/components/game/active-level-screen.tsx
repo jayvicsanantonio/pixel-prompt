@@ -12,7 +12,13 @@ import {
   type Level,
   type LevelAttempt,
 } from "@/lib/game";
-import { buildFailurePreview, buildResultPreview, buildSummaryPreview, findLevelProgress } from "@/lib/game/screen-state";
+import {
+  buildFailurePreview,
+  buildProgressOverview,
+  buildResultPreview,
+  buildSummaryPreview,
+  findLevelProgress,
+} from "@/lib/game/screen-state";
 import styles from "./active-level-screen.module.css";
 
 interface ActiveLevelScreenProps {
@@ -87,6 +93,10 @@ function buildLiveScreenState(input: {
     attemptsRemaining: attemptedLevelProgress?.attemptsRemaining ?? input.previousState.attemptsRemaining,
     promptDraft: input.attempt.promptText,
     resultPreview: buildResultPreview(attemptedLevel, input.attempt),
+    progressOverview: buildProgressOverview({
+      progress: input.progress,
+      currentLevel: input.currentLevel ?? attemptedLevel,
+    }),
     continuation: {
       attemptsRemainingAfterResult:
         attemptedLevelProgress?.attemptsRemaining ?? input.previousState.continuation.attemptsRemainingAfterResult,
@@ -122,6 +132,10 @@ function buildResetScreenState(input: {
     attemptsUsed: currentLevelProgress?.attemptsUsed ?? 0,
     attemptsRemaining: currentLevelProgress?.attemptsRemaining ?? input.currentLevel.maxAttempts,
     promptDraft: "",
+    progressOverview: buildProgressOverview({
+      progress: input.progress,
+      currentLevel: input.currentLevel,
+    }),
     continuation: {
       attemptsRemainingAfterResult: currentLevelProgress?.attemptsRemaining ?? input.currentLevel.maxAttempts,
       nextLevelHref: nextLevel ? `/play?level=${nextLevel.number}` : null,
@@ -131,6 +145,36 @@ function buildResetScreenState(input: {
     },
     summaryPreview: buildSummaryPreview(input.progress),
   };
+}
+
+function getProgressStatusLabel(status: ActiveLevelScreenState["progressOverview"]["levels"][number]["status"]) {
+  switch (status) {
+    case "passed":
+      return uiCopy.gameplay.progress.passed;
+    case "failed":
+      return uiCopy.gameplay.progress.failed;
+    case "locked":
+      return uiCopy.gameplay.progress.locked;
+    case "unlocked":
+      return uiCopy.gameplay.progress.unlocked;
+    default:
+      return uiCopy.gameplay.progress.active;
+  }
+}
+
+function getProgressStatusBody(levelProgress: ActiveLevelScreenState["progressOverview"]["levels"][number]) {
+  switch (levelProgress.status) {
+    case "passed":
+      return uiCopy.gameplay.progress.passedBody;
+    case "failed":
+      return uiCopy.gameplay.progress.failedBody;
+    case "locked":
+      return uiCopy.gameplay.progress.lockedBody;
+    case "unlocked":
+      return uiCopy.gameplay.progress.unlockedBody;
+    default:
+      return uiCopy.gameplay.progress.activeBody;
+  }
 }
 
 export function ActiveLevelScreen({
@@ -457,6 +501,119 @@ export function ActiveLevelScreen({
         <div className={styles.pearLeft} />
         <div className={styles.pearRight} />
       </div>
+    );
+  }
+
+  function renderProgressRail() {
+    return (
+      <section className={styles.progressRail} aria-labelledby="run-progress-title">
+        <div className={styles.progressRailHeader}>
+          <div>
+            <p className={styles.eyebrow}>{uiCopy.gameplay.progress.eyebrow}</p>
+            <h2 className={styles.progressRailTitle} id="run-progress-title">
+              {uiCopy.gameplay.progress.title}
+            </h2>
+          </div>
+          <p className={styles.helperText}>{uiCopy.gameplay.progress.helper}</p>
+        </div>
+
+        <div className={styles.progressRailList}>
+          {state.progressOverview.levels.map((levelProgress) => {
+            const statusClass =
+              levelProgress.status === "passed"
+                ? styles.progressStatusPassed
+                : levelProgress.status === "failed"
+                  ? styles.progressStatusFailed
+                  : levelProgress.status === "locked"
+                    ? styles.progressStatusLocked
+                    : styles.progressStatusActive;
+            const showAttempts =
+              levelProgress.attemptsRemaining != null && (levelProgress.isCurrent || levelProgress.status === "failed");
+
+            return (
+              <article
+                key={levelProgress.levelId}
+                aria-label={`Level ${levelProgress.levelNumber} progression`}
+                className={`${styles.progressCard} ${levelProgress.isCurrent ? styles.progressCardCurrent : ""}`.trim()}
+              >
+                <div className={styles.progressCardHeader}>
+                  <p className={styles.statLabel}>
+                    {uiCopy.gameplay.topBar.level} {levelProgress.levelNumber}
+                  </p>
+                  <span className={`${styles.progressStatus} ${statusClass}`.trim()}>
+                    {getProgressStatusLabel(levelProgress.status)}
+                  </span>
+                </div>
+
+                <h3 className={styles.progressCardTitle}>{levelProgress.levelTitle}</h3>
+                <p className={styles.progressCardBody}>{getProgressStatusBody(levelProgress)}</p>
+
+                <div className={styles.progressMetaRow}>
+                  <span className={styles.progressMetaItem}>
+                    {uiCopy.gameplay.progress.threshold} {levelProgress.threshold}%
+                  </span>
+                  {levelProgress.bestScore != null ? (
+                    <span className={styles.progressMetaItem}>
+                      {uiCopy.gameplay.progress.bestScore} {levelProgress.bestScore}%
+                    </span>
+                  ) : null}
+                  {showAttempts ? (
+                    <span className={styles.progressMetaItem}>
+                      {uiCopy.gameplay.progress.attemptsLeft} {levelProgress.attemptsRemaining}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className={styles.progressCardActions}>
+                  {levelProgress.isCurrent && levelProgress.status === "failed" ? (
+                    restartLevelEndpoint ? (
+                      <button
+                        className={styles.secondaryButton}
+                        type="button"
+                        disabled={isTransitioningLevel}
+                        onClick={() => {
+                          void mutateLevelProgress(restartLevelEndpoint, levelProgress.levelId);
+                        }}
+                      >
+                        {uiCopy.gameplay.failure.restartCta}
+                      </button>
+                    ) : (
+                      <a className={styles.secondaryButton} href={levelProgress.href}>
+                        {uiCopy.gameplay.failure.restartCta}
+                      </a>
+                    )
+                  ) : levelProgress.isCurrent ? (
+                    <span className={styles.progressActionText}>{uiCopy.gameplay.progress.currentCta}</span>
+                  ) : levelProgress.status === "passed" ? (
+                    replayLevelEndpoint ? (
+                      <button
+                        className={styles.secondaryButton}
+                        type="button"
+                        disabled={isTransitioningLevel}
+                        onClick={() => {
+                          void mutateLevelProgress(replayLevelEndpoint, levelProgress.levelId);
+                        }}
+                      >
+                        {uiCopy.gameplay.summary.buildReplayCta(levelProgress.levelNumber)}
+                      </button>
+                    ) : (
+                      <a className={styles.secondaryButton} href={levelProgress.href}>
+                        {uiCopy.gameplay.summary.buildReplayCta(levelProgress.levelNumber)}
+                      </a>
+                    )
+                  ) : levelProgress.status === "unlocked" ? (
+                    <Link className={styles.secondaryButton} href={levelProgress.href}>
+                      {uiCopy.gameplay.progress.openCta} {levelProgress.levelNumber}
+                    </Link>
+                  ) : (
+                    <span className={styles.progressActionText}>{getProgressStatusLabel(levelProgress.status)}</span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     );
   }
 
@@ -1038,6 +1195,8 @@ export function ActiveLevelScreen({
           </article>
         </div>
       </header>
+
+      {renderProgressRail()}
 
       <div className={styles.shell}>
         <section className={styles.targetPanel}>

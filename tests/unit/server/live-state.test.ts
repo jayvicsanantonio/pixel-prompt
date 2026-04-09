@@ -40,12 +40,12 @@ describe("buildLiveActiveLevelState", () => {
       },
     }).session;
 
-    expect(
-      buildLiveActiveLevelState({
-        session: progressedSession,
-        preferResume: true,
-      }),
-    ).toMatchObject({
+    const state = buildLiveActiveLevelState({
+      session: progressedSession,
+      preferResume: true,
+    });
+
+    expect(state).toMatchObject({
       level: {
         id: "level-1",
       },
@@ -62,6 +62,21 @@ describe("buildLiveActiveLevelState", () => {
         strongestAttemptScore: 41,
       },
     });
+    expect(state.progressOverview.highestUnlockedLevelNumber).toBe(1);
+    expect(state.progressOverview.levels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          levelId: "level-1",
+          status: "in_progress",
+          isCurrent: true,
+        }),
+        expect.objectContaining({
+          levelId: "level-2",
+          status: "locked",
+          isCurrent: false,
+        }),
+      ]),
+    );
   });
 
   it("boots a failed saved level directly into the failure screen", () => {
@@ -172,17 +187,32 @@ describe("buildLiveActiveLevelState", () => {
       },
     }).session;
 
-    expect(
-      buildLiveActiveLevelState({
-        session: passedLevelOneSession,
-        requestedLevelNumber: 1,
-      }),
-    ).toMatchObject({
+    const state = buildLiveActiveLevelState({
+      session: passedLevelOneSession,
+      requestedLevelNumber: 1,
+    });
+
+    expect(state).toMatchObject({
       level: {
         id: "level-2",
         number: 2,
       },
     });
+    expect(state.progressOverview.highestUnlockedLevelNumber).toBe(2);
+    expect(state.progressOverview.levels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          levelId: "level-1",
+          status: "passed",
+          isCurrent: false,
+        }),
+        expect.objectContaining({
+          levelId: "level-2",
+          status: "in_progress",
+          isCurrent: true,
+        }),
+      ]),
+    );
   });
 
   it("recovers the nearest valid active level when the stored currentLevelId is unavailable", () => {

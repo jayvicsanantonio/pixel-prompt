@@ -3,6 +3,7 @@ import type { ActiveLevelScreenState, Level } from "@/lib/game";
 import {
   buildContinuationPreview,
   buildFailurePreview,
+  buildProgressOverview,
   buildResultPreview,
   buildSummaryPreview,
   findLevelProgress,
@@ -97,6 +98,10 @@ export function buildLiveActiveLevelState(input: {
           runId: input.session.progress.runId,
         }
       : undefined,
+    progressOverview: buildProgressOverview({
+      progress: input.session?.progress ?? null,
+      currentLevel: selectedLevel,
+    }),
     resultPreview: buildResultPreview(selectedLevel, resultAttempt),
     continuation: buildContinuationPreview(selectedLevel, attemptsRemaining),
     failurePreview: buildFailurePreview({
