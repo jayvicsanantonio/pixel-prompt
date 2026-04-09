@@ -1,5 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { captureClientAnalyticsEvent } = vi.hoisted(() => ({
+  captureClientAnalyticsEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/analytics/client", () => ({
+  captureClientAnalyticsEvent,
+}));
+
 import { ActiveLevelScreen } from "@/components/game/active-level-screen";
 import { levels } from "@/content";
 import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
@@ -7,6 +16,7 @@ import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
 describe("ActiveLevelScreen", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    captureClientAnalyticsEvent.mockReset();
   });
 
   it("renders level metadata, attempts, and the target image study area", () => {
@@ -18,6 +28,13 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "A sunlit still life arranged on a wooden table." })).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-mock",
+        levelId: "level-1",
+      }),
+    );
   });
 
   it("updates the character counter as the player types", () => {
@@ -29,6 +46,64 @@ describe("ActiveLevelScreen", () => {
 
     expect(prompt).toHaveValue("warm pears on a sunlit table");
     expect(screen.getByText("28/120 characters")).toBeInTheDocument();
+  });
+
+  it("syncs the rendered level and analytics payload when the state prop changes", () => {
+    const { rerender } = render(<ActiveLevelScreen state={getMockActiveLevelState()} />);
+
+    captureClientAnalyticsEvent.mockClear();
+
+    rerender(
+      <ActiveLevelScreen
+        state={{
+          ...getMockActiveLevelState({ levelNumber: 2, resume: true }),
+          promptDraft: "cinematic neon portrait framed by wet reflections",
+          analytics: {
+            anonymousPlayerId: "player-next",
+            runId: "run-next",
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("cinematic neon portrait framed by wet reflections");
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-next",
+        levelId: "level-2",
+      }),
+    );
+  });
+
+  it("treats anonymous player changes as distinct level-start dedupe keys when no run exists", () => {
+    const initialAnonymousState = {
+      ...getMockActiveLevelState(),
+      analytics: {
+        anonymousPlayerId: "player-anon-a",
+      },
+    };
+    const nextAnonymousState = {
+      ...getMockActiveLevelState(),
+      analytics: {
+        anonymousPlayerId: "player-anon-b",
+      },
+    };
+    const { rerender } = render(<ActiveLevelScreen state={initialAnonymousState} />);
+
+    captureClientAnalyticsEvent.mockClear();
+    rerender(<ActiveLevelScreen state={nextAnonymousState} />);
+
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledTimes(1);
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "level_started",
+        anonymousPlayerId: "player-anon-b",
+        levelId: "level-1",
+      }),
+    );
+    expect(captureClientAnalyticsEvent.mock.calls[0]?.[0]).not.toHaveProperty("runId");
   });
 
   it("opens a larger target study view for closer inspection", () => {
@@ -639,6 +714,8 @@ describe("ActiveLevelScreen", () => {
     const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
     render(<ActiveLevelScreen state={exhaustedState} restartLevelEndpoint="/api/game/restart-level" />);
 
+    captureClientAnalyticsEvent.mockClear();
+
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
     fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
     fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
@@ -654,6 +731,134 @@ describe("ActiveLevelScreen", () => {
     expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
     expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toHaveValue("");
+    expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([
+      "level_restarted",
+      "level_started",
+    ]);
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        name: "level_restarted",
+        runId: "run-1",
+        levelId: "level-2",
+        priorAttemptsUsed: 2,
+        bestScoreBeforeRestart: 59,
+      }),
+    );
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-1",
+        levelId: "level-2",
+        levelNumber: 2,
+        threshold: 60,
+        attemptWindow: 3,
+      }),
+    );
+  });
+
+  it("keeps the restart transition successful when client analytics throws", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 3,
+              bestScore: 59,
+              helperText: "Pick up the same run without replaying cleared progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 2,
+            totalAttemptsUsed: 3,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:10:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "in_progress",
+                currentAttemptCycle: 2,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: 59,
+                strongestAttemptId: "attempt-live-2",
+                unlockedAt: "2026-04-07T08:05:00.000Z",
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: "2026-04-07T08:10:00.000Z",
+              },
+              {
+                levelId: "level-3",
+                status: "locked",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: null,
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
+    render(<ActiveLevelScreen state={exhaustedState} restartLevelEndpoint="/api/game/restart-level" />);
+
+    captureClientAnalyticsEvent.mockClear();
+    captureClientAnalyticsEvent.mockImplementation(() => {
+      throw new Error("posthog unavailable");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart Level" }));
+
+    expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("");
+    expect(screen.queryByText("That action did not go through. Try again.")).not.toBeInTheDocument();
+    expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([
+      "level_restarted",
+      "level_started",
+    ]);
   });
 
   it("replays a cleared level from the summary through the live replay endpoint", async () => {

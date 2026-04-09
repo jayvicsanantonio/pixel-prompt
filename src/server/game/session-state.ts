@@ -86,13 +86,17 @@ function updateLevelProgress(
   return levels.map((levelProgress) => (levelProgress.levelId === levelId ? update(levelProgress) : levelProgress));
 }
 
+function isPlayableLevelStatus(status: LevelProgress["status"]) {
+  return status === "in_progress" || status === "failed" || status === "unlocked";
+}
+
 function resolveFallbackCurrentLevelId(progress: GameProgress, levels: Level[]) {
   const sortedLevels = sortLevels(levels);
 
   const activeLevel = sortedLevels.find((level) => {
     const levelProgress = progress.levels.find((candidate) => candidate.levelId === level.id);
 
-    return levelProgress?.status === "in_progress" || levelProgress?.status === "failed" || levelProgress?.status === "unlocked";
+    return levelProgress ? isPlayableLevelStatus(levelProgress.status) : false;
   });
 
   return activeLevel?.id ?? null;
@@ -171,10 +175,17 @@ export function resolveResumeLevel(progress: GameProgress, levels: Level[] = def
     return null;
   }
 
+  const activeLevel = resolveActiveLevel(progress, sortedLevels);
+
+  if (activeLevel) {
+    return activeLevel;
+  }
+
   if (progress.currentLevelId) {
     const currentLevel = sortedLevels.find((level) => level.id === progress.currentLevelId);
+    const currentLevelProgress = progress.levels.find((levelProgress) => levelProgress.levelId === progress.currentLevelId) ?? null;
 
-    if (currentLevel) {
+    if (currentLevel && currentLevelProgress?.status === "passed") {
       return currentLevel;
     }
   }
@@ -184,6 +195,31 @@ export function resolveResumeLevel(progress: GameProgress, levels: Level[] = def
     .find((level) => level.number <= Math.max(progress.highestUnlockedLevelNumber, 1));
 
   return highestUnlockedLevel ?? sortedLevels[0];
+}
+
+export function resolveActiveLevel(progress: GameProgress, levels: Level[] = defaultLevels) {
+  const sortedLevels = sortLevels(levels);
+
+  if (sortedLevels.length === 0) {
+    return null;
+  }
+
+  if (progress.currentLevelId) {
+    const currentLevel = sortedLevels.find((level) => level.id === progress.currentLevelId) ?? null;
+    const currentLevelProgress = progress.levels.find((levelProgress) => levelProgress.levelId === progress.currentLevelId) ?? null;
+
+    if (currentLevel && currentLevelProgress && isPlayableLevelStatus(currentLevelProgress.status)) {
+      return currentLevel;
+    }
+  }
+
+  const fallbackCurrentLevelId = resolveFallbackCurrentLevelId(progress, sortedLevels);
+
+  if (!fallbackCurrentLevelId) {
+    return null;
+  }
+
+  return sortedLevels.find((level) => level.id === fallbackCurrentLevelId) ?? null;
 }
 
 export function buildLandingExperience(session: GameSessionSnapshot | null, levels: Level[] = defaultLevels): LandingExperienceState {
@@ -241,11 +277,14 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
     resume: {
       available: true,
       href: `/play?level=${currentLevel.number}&resume=1`,
+      currentLevelId: currentLevel.id,
       currentLevelNumber: currentLevel.number,
       currentLevelTitle: currentLevel.title,
       levelsCleared,
       attemptsRemaining,
       bestScore,
+      highestUnlockedLevelNumber: session.progress.highestUnlockedLevelNumber,
+      runId: session.progress.runId,
       helperText,
     },
   };
@@ -256,8 +295,9 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
   const now = getNow(input.createdAt);
   const level = findLevel(levels, input.levelId);
   const currentLevelProgress = findLevelProgress(input.session.progress, input.levelId);
+  const activeLevel = resolveActiveLevel(input.session.progress, levels);
 
-  if (input.session.progress.currentLevelId !== input.levelId) {
+  if (activeLevel && activeLevel.id !== input.levelId) {
     throw new Error(`Cannot record attempts for non-current level "${input.levelId}".`);
   }
 
@@ -271,6 +311,10 @@ export function recordAttempt(input: RecordAttemptInput): RecordAttemptResult {
 
   if (currentLevelProgress.status === "passed") {
     throw new Error(`Cannot record attempts for passed level "${input.levelId}" without replaying it first.`);
+  }
+
+  if (!activeLevel) {
+    throw new Error(`Cannot record attempts for non-current level "${input.levelId}".`);
   }
 
   const attemptsForCurrentCycle = input.session.attempts.filter(

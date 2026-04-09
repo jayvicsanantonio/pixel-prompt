@@ -59,4 +59,23 @@ describe("analytics events", () => {
     expect(event.levelId).toBe("level-2");
     expect(event.levelNumber).toBe(2);
   });
+
+  it("allows entry funnel events before a server run has been minted", () => {
+    const started = defineAnalyticsEvent({
+      name: "game_started",
+      occurredAt: "2026-03-29T08:00:00.000Z",
+      entry: "new",
+    });
+    const levelStarted = defineAnalyticsEvent({
+      name: "level_started",
+      occurredAt: "2026-03-29T08:00:01.000Z",
+      levelId: "level-1",
+      levelNumber: 1,
+      threshold: 50,
+      attemptWindow: 3,
+    });
+
+    expect(started.entry).toBe("new");
+    expect(levelStarted.levelId).toBe("level-1");
+  });
 });

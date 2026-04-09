@@ -184,4 +184,60 @@ describe("buildLiveActiveLevelState", () => {
       },
     });
   });
+
+  it("recovers the nearest valid active level when the stored currentLevelId is unavailable", () => {
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: "2026-04-07T08:00:00.000Z",
+    });
+    const passedLevelOneSession = recordAttempt({
+      session,
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-07T08:05:00.000Z",
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "mock",
+            model: "fixture",
+          },
+        },
+      },
+    }).session;
+    const orphanedSession = {
+      ...passedLevelOneSession,
+      progress: {
+        ...passedLevelOneSession.progress,
+        currentLevelId: "removed-level",
+      },
+    };
+
+    expect(
+      buildLiveActiveLevelState({
+        session: orphanedSession,
+        preferResume: true,
+        requestedLevelNumber: 1,
+      }),
+    ).toMatchObject({
+      level: {
+        id: "level-2",
+        number: 2,
+      },
+      attemptsUsed: 0,
+      attemptsRemaining: 3,
+      initialScreenMode: "active",
+    });
+  });
 });

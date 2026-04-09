@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import { levels } from "@/content";
-import { buildLandingExperience, createGameSession, recordAttempt, replayLevel, restartFailedLevel } from "@/server/game/session-state";
+import {
+  buildLandingExperience,
+  createGameSession,
+  recordAttempt,
+  replayLevel,
+  resolveActiveLevel,
+  resolveResumeLevel,
+  restartFailedLevel,
+} from "@/server/game/session-state";
 
 describe("session-state", () => {
   const startedAt = "2026-04-04T00:00:00.000Z";
@@ -102,11 +110,14 @@ describe("session-state", () => {
       resume: {
         available: true,
         href: "/play?level=1&resume=1",
+        currentLevelId: "level-1",
         currentLevelNumber: 1,
         currentLevelTitle: "Sunlit Still Life",
         levelsCleared: 0,
         attemptsRemaining: 2,
         bestScore: 41,
+        highestUnlockedLevelNumber: 1,
+        runId: "run-1",
         helperText: "Pick up the same run without replaying cleared progress.",
       },
     });
@@ -656,5 +667,62 @@ describe("session-state", () => {
         now: "2026-04-04T00:20:00.000Z",
       }),
     ).toThrow('Only currently completed levels can be replayed. Received "failed".');
+  });
+
+  it("recovers the nearest valid active level when stored currentLevelId is unavailable", () => {
+    const session = createGameSession({
+      playerId: "player-1",
+      runId: "run-1",
+      now: startedAt,
+    });
+    const passedLevelOne = recordAttempt({
+      session,
+      levelId: "level-1",
+      attemptId: "attempt-1",
+      promptText: "sunlit pears and bottle on a wooden table",
+      createdAt: "2026-04-04T00:05:00.000Z",
+      result: {
+        status: "scored",
+        outcome: "passed",
+        tipIds: [],
+        score: {
+          raw: 0.74,
+          normalized: 74,
+          threshold: 50,
+          passed: true,
+          breakdown: {
+            subject: 78,
+          },
+          scorer: {
+            provider: "openai",
+            model: "gpt-5.4-mini",
+          },
+        },
+      },
+    }).session;
+    const orphanedSession = {
+      ...passedLevelOne,
+      progress: {
+        ...passedLevelOne.progress,
+        currentLevelId: "removed-level",
+      },
+    };
+
+    expect(resolveActiveLevel(orphanedSession.progress, levels)).toMatchObject({
+      id: "level-2",
+      number: 2,
+    });
+    expect(resolveResumeLevel(orphanedSession.progress, levels)).toMatchObject({
+      id: "level-2",
+      number: 2,
+    });
+    expect(buildLandingExperience(orphanedSession, levels)).toMatchObject({
+      resume: {
+        available: true,
+        href: "/play?level=2&resume=1",
+        currentLevelNumber: 2,
+        currentLevelTitle: "Midnight Alley Portrait",
+      },
+    });
   });
 });

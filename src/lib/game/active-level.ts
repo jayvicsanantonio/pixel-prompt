@@ -44,6 +44,10 @@ export interface ActiveLevelScreenState {
   attemptsUsed: number;
   attemptsRemaining: number;
   promptDraft: string;
+  analytics?: {
+    anonymousPlayerId?: string;
+    runId?: string;
+  };
   resultPreview: ActiveLevelResultPreview;
   continuation: ActiveLevelContinuationPreview;
   failurePreview: ActiveLevelFailurePreview;

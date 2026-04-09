@@ -27,7 +27,7 @@ const landingViewedEventSchema = analyticsBaseSchema.extend({
 
 const gameStartedEventSchema = analyticsBaseSchema.extend({
   name: z.literal("game_started"),
-  runId: z.string().min(1),
+  runId: z.string().min(1).optional(),
   entry: z.enum(["new", "resume"]),
 });
 
@@ -47,7 +47,7 @@ const resumeStartedEventSchema = analyticsBaseSchema.extend({
 
 const levelStartedEventSchema = analyticsBaseSchema.extend({
   name: z.literal("level_started"),
-  runId: z.string().min(1),
+  runId: z.string().min(1).optional(),
   levelId: z.string().min(1),
   levelNumber: z.number().int().positive(),
   threshold: z.number().min(0).max(100),
@@ -204,7 +204,7 @@ export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
     return event.anonymousPlayerId;
   }
 
-  if ("runId" in event) {
+  if ("runId" in event && typeof event.runId === "string" && event.runId.trim().length > 0) {
     return `run:${event.runId}`;
   }
 

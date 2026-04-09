@@ -115,6 +115,23 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
     };
   }
 
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.generationRateLimit)) {
+    return {
+      generation: {
+        provider: "mock",
+        model: "local-generation-fixture-v1",
+      },
+      result: {
+        status: "technical_failure",
+        outcome: "error",
+        failureKind: "rate_limited",
+        tipIds: [],
+        errorCode: "mock_generation_rate_limit",
+        errorMessage: "The mock generation fixture was rate-limited before returning an image.",
+      },
+    };
+  }
+
   if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.interrupted)) {
     return {
       generation: {
@@ -128,6 +145,26 @@ export function evaluateMockAttempt(level: Level, promptText: string, attemptId:
         tipIds: [],
         errorCode: "mock_generation_interrupted",
         errorMessage: "The mock generation fixture was interrupted before returning an image.",
+      },
+    };
+  }
+
+  if (normalizedPrompt.includes(MOCK_PROVIDER_PROMPT_MARKERS.scoringRateLimit)) {
+    return {
+      generation: {
+        provider: "mock",
+        model: "local-generation-fixture-v1",
+        assetKey: `generated/${level.id}/${attemptId}.png`,
+        seed: `${level.id}:${promptText.length}`,
+        revisedPrompt: promptText,
+      },
+      result: {
+        status: "technical_failure",
+        outcome: "error",
+        failureKind: "rate_limited",
+        tipIds: [],
+        errorCode: "mock_scoring_rate_limit",
+        errorMessage: "The mock scoring fixture was rate-limited before returning a score.",
       },
     };
   }

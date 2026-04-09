@@ -8,7 +8,9 @@ import { POST as postRestartLevel } from "@/app/api/game/restart-level/route";
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
-import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+import type { ImageGenerationProvider } from "@/server/providers/contracts";
+import { getOrCreateSession, mutateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+import * as imageGenerationProviderModule from "@/server/providers/image-generation";
 
 function getCookieHeader(response: Response) {
   return response.headers.get("set-cookie");
@@ -99,6 +101,7 @@ describe("game http handlers", () => {
       process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = originalTargetAssetDir;
     }
 
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -204,6 +207,73 @@ describe("game http handlers", () => {
       levelId: "level-1",
       attemptsUsed: 0,
       attemptsRemaining: 3,
+    });
+  });
+
+  it("recovers resume and submission flows when stored progress references an unavailable current level", async () => {
+    const sessionToken = await createSessionToken();
+
+    const setupSubmitResponse = await submitAttempt(
+      sessionToken,
+      "level-1",
+      "sunlit still life of pears and a bottle on a wooden table",
+    );
+    expect(setupSubmitResponse.status).toBe(200);
+    await expect(setupSubmitResponse.json()).resolves.toMatchObject({
+      ok: true,
+      transition: "passed",
+    });
+
+    await mutateSession(sessionToken, (session) => ({
+      session: {
+        ...session,
+        progress: {
+          ...session.progress,
+          currentLevelId: "removed-level",
+        },
+      },
+      value: undefined,
+    }));
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedResponse.status).toBe(200);
+    expect(resumedBody).toMatchObject({
+      currentLevel: {
+        id: "level-2",
+        number: 2,
+      },
+      landing: {
+        resume: {
+          available: true,
+          href: "/play?level=2&resume=1",
+          currentLevelNumber: 2,
+        },
+      },
+    });
+
+    const resumedSubmitResponse = await submitAttempt(
+      sessionToken,
+      "level-2",
+      "cinematic neon portrait in a wet alley at midnight with urban signs",
+    );
+    const resumedSubmitBody = await resumedSubmitResponse.json();
+
+    expect(resumedSubmitResponse.status).toBe(200);
+    expect(resumedSubmitBody).toMatchObject({
+      ok: true,
+      transition: "passed",
+      progress: {
+        currentLevelId: "level-3",
+        highestUnlockedLevelNumber: 3,
+      },
     });
   });
 
@@ -608,6 +678,44 @@ describe("game http handlers", () => {
     });
   });
 
+  it("preserves attempts when generation is rate-limited", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #rate-limit",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "error",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        result: {
+          status: "technical_failure",
+          failureKind: "rate_limited",
+          errorCode: "mock_generation_rate_limit",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
   it("preserves attempts when the mock provider reports a content-policy rejection", async () => {
     const sessionToken = await createSessionToken();
 
@@ -678,6 +786,47 @@ describe("game http handlers", () => {
           status: "content_policy_rejected",
           failureKind: "content_policy_rejection",
           errorCode: "mock_scoring_policy_rejection",
+        },
+      },
+      progress: {
+        currentLevelId: "level-1",
+        totalAttemptsUsed: 0,
+      },
+    });
+  });
+
+  it("preserves attempts when scoring is rate-limited after generation succeeds", async () => {
+    const sessionToken = await createSessionToken();
+
+    const submitResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #score-rate-limit",
+        }),
+      }),
+    );
+    const submitBody = await submitResponse.json();
+
+    expect(submitResponse.status).toBe(200);
+    expect(submitBody).toMatchObject({
+      ok: true,
+      transition: "error",
+      attempt: {
+        levelId: "level-1",
+        consumedAttempt: false,
+        generation: {
+          assetKey: expect.stringContaining("generated/mock/level-1/"),
+        },
+        result: {
+          status: "technical_failure",
+          failureKind: "rate_limited",
+          errorCode: "mock_scoring_rate_limit",
         },
       },
       progress: {
@@ -809,6 +958,62 @@ describe("game http handlers", () => {
     await expect(blockedResponse.json()).resolves.toMatchObject({
       ok: false,
       code: "restart_required",
+    });
+  });
+
+  it("returns a level_changed conflict when the run changes during provider evaluation", async () => {
+    const sessionToken = await createSessionToken();
+    let resolveGenerationGate = () => {};
+    let markGenerationStarted = () => {};
+    const generationGate = new Promise<void>((resolve) => {
+      resolveGenerationGate = resolve;
+    });
+    const generationStarted = new Promise<void>((resolve) => {
+      markGenerationStarted = resolve;
+    });
+
+    vi.spyOn(imageGenerationProviderModule, "getImageGenerationProvider").mockReturnValue({
+      providerId: "delayed-mock-image",
+      modelRef: {
+        provider: "mock",
+        model: "delayed-mock-image",
+      },
+      async generateImage() {
+        markGenerationStarted();
+        await generationGate;
+
+        return {
+          ok: false,
+          kind: "technical_failure",
+          code: "delayed_mock_generation_failure",
+          message: "Delayed mock generation failure.",
+          retryable: true,
+          consumeAttempt: false,
+        };
+      },
+    } satisfies ImageGenerationProvider);
+
+    const responsePromise = submitAttempt(sessionToken, "level-1", "sunlit still life");
+
+    await generationStarted;
+    await mutateSession(sessionToken, (session) => ({
+      session: {
+        ...session,
+        progress: {
+          ...session.progress,
+          runId: "run-raced",
+        },
+      },
+      value: null,
+    }));
+    resolveGenerationGate();
+
+    const response = await responsePromise;
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      code: "level_changed",
     });
   });
 

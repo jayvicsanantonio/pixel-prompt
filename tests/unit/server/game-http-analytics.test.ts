@@ -160,6 +160,38 @@ describe("game http analytics", () => {
     ]);
   });
 
+  it("emits rate-limit telemetry when generation is rate-limited", async () => {
+    const sessionToken = await createSessionToken();
+
+    const response = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #rate-limit",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
+    expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
+    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: "prompt_submitted",
+      }),
+      expect.objectContaining({
+        name: "generation_completed",
+        success: false,
+        failureKind: "rate_limited",
+      }),
+    ]);
+  });
+
   it("emits interrupted failure telemetry when a provider request is interrupted", async () => {
     const sessionToken = await createSessionToken();
 
@@ -225,6 +257,43 @@ describe("game http analytics", () => {
         name: "scoring_completed",
         success: false,
         failureKind: "content_policy_rejection",
+      }),
+    ]);
+  });
+
+  it("emits scoring rate-limit telemetry after generation succeeds", async () => {
+    const sessionToken = await createSessionToken();
+
+    const response = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "sunlit still life #score-rate-limit",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await flushBackgroundAnalytics();
+    expect(captureServerAnalyticsEvents).toHaveBeenCalledTimes(1);
+    expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: "prompt_submitted",
+      }),
+      expect.objectContaining({
+        name: "generation_completed",
+        success: true,
+        failureKind: undefined,
+      }),
+      expect.objectContaining({
+        name: "scoring_completed",
+        success: false,
+        failureKind: "rate_limited",
       }),
     ]);
   });

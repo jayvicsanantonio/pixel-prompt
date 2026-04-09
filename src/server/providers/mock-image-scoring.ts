@@ -36,6 +36,17 @@ export class MockImageScoringProvider implements ImageScoringProvider {
       };
     }
 
+    if (request.prompt.toLowerCase().includes(MOCK_PROVIDER_PROMPT_MARKERS.scoringRateLimit)) {
+      return {
+        ok: false,
+        kind: "rate_limited",
+        code: "mock_scoring_rate_limit",
+        message: "The mock scoring fixture was rate-limited before returning a score.",
+        retryable: true,
+        consumeAttempt: false,
+      };
+    }
+
     const level = levels.find((candidate) => candidate.id === request.context.levelId);
 
     if (!level) {

@@ -12,11 +12,14 @@ export type LandingResumeState =
   | {
       available: true;
       href: string;
+      currentLevelId: string;
       currentLevelNumber: number;
       currentLevelTitle: string;
       levelsCleared: number;
       attemptsRemaining: number;
       bestScore: number;
+      highestUnlockedLevelNumber: number;
+      runId: string;
       helperText: string;
     };
 

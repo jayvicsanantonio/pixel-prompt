@@ -1,10 +1,23 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const { captureClientAnalyticsEvent } = vi.hoisted(() => ({
+  captureClientAnalyticsEvent: vi.fn(),
+}));
+
+vi.mock("@/lib/analytics/client", () => ({
+  captureClientAnalyticsEvent,
+}));
+
 import { LandingScreen } from "@/components/landing/landing-screen";
 import { levels } from "@/content";
 import { getMockLandingState } from "@/server/game/mock-landing-state";
 
 describe("LandingScreen", () => {
+  afterEach(() => {
+    captureClientAnalyticsEvent.mockReset();
+  });
+
   it("renders the start CTA and empty resume state", () => {
     render(<LandingScreen landingState={getMockLandingState()} levels={levels} />);
 
@@ -14,6 +27,11 @@ describe("LandingScreen", () => {
     expect(screen.getByText("Pass at 50% match")).toBeInTheDocument();
     expect(screen.getByText("Pass at 60% match")).toBeInTheDocument();
     expect(screen.getByText("Pass at 70% match")).toBeInTheDocument();
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "landing_viewed",
+      }),
+    );
   });
 
   it("renders the resume CTA when a saved run exists", () => {
@@ -28,5 +46,52 @@ describe("LandingScreen", () => {
     expect(resumeCard).toHaveTextContent("2 attempts left.");
     expect(resumeCard).toHaveTextContent("1 level");
     expect(resumeCard).toHaveTextContent("54%");
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "resume_offered",
+        runId: "run-mock",
+        levelId: "level-2",
+      }),
+    );
+  });
+
+  it("captures start and resume funnel events from the landing CTAs", () => {
+    render(<LandingScreen landingState={getMockLandingState({ canResume: true })} levels={levels} />);
+
+    captureClientAnalyticsEvent.mockClear();
+
+    fireEvent.click(screen.getByRole("link", { name: "Start Game" }));
+    fireEvent.click(screen.getByRole("link", { name: "Start Game" }));
+    fireEvent.click(screen.getByRole("link", { name: "Resume Level 2" }));
+    fireEvent.click(screen.getByRole("link", { name: "Resume Level 2" }));
+
+    expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([
+      "game_started",
+      "game_started",
+      "resume_started",
+    ]);
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        name: "game_started",
+        entry: "new",
+      }),
+    );
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        name: "game_started",
+        entry: "resume",
+        runId: "run-mock",
+      }),
+    );
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        name: "resume_started",
+        runId: "run-mock",
+        currentLevelId: "level-2",
+      }),
+    );
   });
 });

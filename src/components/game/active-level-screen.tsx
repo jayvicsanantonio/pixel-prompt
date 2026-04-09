@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { levels, uiCopy } from "@/content";
+import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import {
   toPlayerFacingScore,
   type ActiveLevelScreenState,
@@ -57,6 +58,14 @@ const FOCUSABLE_SELECTOR = [
   'select:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
+
+function safeCaptureClientAnalyticsEvent(event: Parameters<typeof captureClientAnalyticsEvent>[0]) {
+  try {
+    captureClientAnalyticsEvent(event);
+  } catch {
+    // Telemetry failures must never block gameplay transitions.
+  }
+}
 
 function buildLiveScreenState(input: {
   previousState: ActiveLevelScreenState;
@@ -143,6 +152,7 @@ export function ActiveLevelScreen({
   const inspectDialogRef = useRef<HTMLDivElement | null>(null);
   const inspectTriggerRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const lastStartedLevelKeyRef = useRef<string | null>(null);
   const characterCount = promptText.length;
   const characterLimit = state.level.promptCharacterLimit;
   const isOverLimit = characterCount > characterLimit;
@@ -150,6 +160,37 @@ export function ActiveLevelScreen({
   const promptDescribedBy = ["prompt-guidance", "prompt-counter", promptFeedbackId].filter(Boolean).join(" ");
   const playerFacingScore = toPlayerFacingScore(state.resultPreview.score);
   const hasRetryRemaining = state.continuation.attemptsRemainingAfterResult > 0;
+
+  const buildLevelStartedKey = useCallback(
+    (level: Level, analyticsOverride?: ActiveLevelScreenState["analytics"]) =>
+      `${analyticsOverride?.runId ??
+        state.analytics?.runId ??
+        analyticsOverride?.anonymousPlayerId ??
+        state.analytics?.anonymousPlayerId ??
+        "anon"}:${level.id}:${level.number}`,
+    [state.analytics?.anonymousPlayerId, state.analytics?.runId],
+  );
+
+  const emitLevelStarted = useCallback(
+    (level: Level, analyticsOverride?: ActiveLevelScreenState["analytics"], occurredAt = new Date().toISOString()) => {
+      safeCaptureClientAnalyticsEvent({
+        name: "level_started",
+        occurredAt,
+        anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? state.analytics?.anonymousPlayerId,
+        ...(analyticsOverride?.runId ?? state.analytics?.runId
+          ? {
+              runId: analyticsOverride?.runId ?? state.analytics?.runId,
+            }
+          : {}),
+        levelId: level.id,
+        levelNumber: level.number,
+        threshold: level.threshold,
+        attemptWindow: level.maxAttempts,
+      });
+      lastStartedLevelKeyRef.current = buildLevelStartedKey(level, analyticsOverride);
+    },
+    [buildLevelStartedKey, state.analytics?.anonymousPlayerId, state.analytics?.runId],
+  );
 
   async function mutateLevelProgress(endpoint: string | undefined, levelId: string) {
     if (!endpoint) {
@@ -181,11 +222,40 @@ export function ActiveLevelScreen({
       setSubmittedPrompt("");
       setPromptText("");
       setState((previousState) =>
-        buildResetScreenState({
-          previousState,
-          currentLevel,
-          progress: body.progress,
-        }),
+        ({
+          ...buildResetScreenState({
+            previousState,
+            currentLevel,
+            progress: body.progress,
+          }),
+          analytics: {
+            anonymousPlayerId: body.progress.playerId,
+            runId: body.progress.runId,
+          },
+        }) satisfies ActiveLevelScreenState,
+      );
+      const occurredAt = new Date().toISOString();
+
+      if (endpoint === restartLevelEndpoint) {
+        safeCaptureClientAnalyticsEvent({
+          name: "level_restarted",
+          occurredAt,
+          anonymousPlayerId: body.progress.playerId,
+          runId: body.progress.runId,
+          levelId: currentLevel.id,
+          levelNumber: currentLevel.number,
+          priorAttemptsUsed: state.attemptsUsed,
+          bestScoreBeforeRestart: state.failurePreview.strongestAttemptScore,
+        });
+      }
+
+      emitLevelStarted(
+        currentLevel,
+        {
+          anonymousPlayerId: body.progress.playerId,
+          runId: body.progress.runId,
+        },
+        occurredAt,
       );
       setScreenMode("active");
       return true;
@@ -197,6 +267,17 @@ export function ActiveLevelScreen({
       setIsTransitioningLevel(false);
     }
   }
+
+  useEffect(() => {
+    setState(initialState);
+    setPromptText(initialState.promptDraft);
+    setSubmittedPrompt(initialState.promptDraft);
+    setValidationMessage(null);
+    setScreenMode(initialState.initialScreenMode ?? "active");
+    setIsSubmitting(false);
+    setIsTargetExpanded(false);
+    setIsTransitioningLevel(false);
+  }, [initialState]);
 
   useEffect(() => {
     if (!isTargetExpanded) {
@@ -273,6 +354,20 @@ export function ActiveLevelScreen({
     };
   }, [isTargetExpanded]);
 
+  useEffect(() => {
+    if (screenMode !== "active") {
+      return;
+    }
+
+    const levelStartedKey = buildLevelStartedKey(state.level);
+
+    if (lastStartedLevelKeyRef.current === levelStartedKey) {
+      return;
+    }
+
+    emitLevelStarted(state.level);
+  }, [buildLevelStartedKey, emitLevelStarted, screenMode, state.level]);
+
   async function submitPrompt() {
     const trimmedPrompt = promptText.trim();
 
@@ -323,13 +418,19 @@ export function ActiveLevelScreen({
       }
 
       setState((previousState) =>
-        buildLiveScreenState({
-          previousState,
-          transition: body.transition,
-          attempt: body.attempt,
-          progress: body.progress,
-          currentLevel: body.currentLevel,
-        }),
+        ({
+          ...buildLiveScreenState({
+            previousState,
+            transition: body.transition,
+            attempt: body.attempt,
+            progress: body.progress,
+            currentLevel: body.currentLevel,
+          }),
+          analytics: {
+            anonymousPlayerId: body.progress.playerId,
+            runId: body.progress.runId,
+          },
+        }) satisfies ActiveLevelScreenState,
       );
       setPromptText(trimmedPrompt);
       setScreenMode("result");

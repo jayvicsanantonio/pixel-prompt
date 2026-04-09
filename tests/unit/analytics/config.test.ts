@@ -40,4 +40,28 @@ describe("analytics configuration", () => {
     expect(first).toMatch(/^session:/);
     expect(second).toBe(first);
   });
+
+  it("falls back to browser-session identity when runId is undefined", () => {
+    const first = resolveAnalyticsDistinctId({
+      name: "level_started",
+      occurredAt: "2026-03-29T08:00:00.000Z",
+      runId: undefined,
+      levelId: "level-1",
+      levelNumber: 1,
+      threshold: 50,
+      attemptWindow: 3,
+    });
+    const second = resolveAnalyticsDistinctId({
+      name: "level_started",
+      occurredAt: "2026-03-29T08:00:01.000Z",
+      runId: undefined,
+      levelId: "level-1",
+      levelNumber: 1,
+      threshold: 50,
+      attemptWindow: 3,
+    });
+
+    expect(first).toMatch(/^session:/);
+    expect(second).toBe(first);
+  });
 });
