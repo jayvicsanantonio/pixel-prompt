@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { levels, uiCopy } from "@/content";
 import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import {
@@ -154,23 +154,32 @@ export function ActiveLevelScreen({
   const playerFacingScore = toPlayerFacingScore(state.resultPreview.score);
   const hasRetryRemaining = state.continuation.attemptsRemainingAfterResult > 0;
 
-  function buildLevelStartedKey(level: Level, analyticsOverride?: typeof analytics) {
-    return `${analyticsOverride?.runId ?? analytics?.runId ?? "anon"}:${level.id}:${level.number}`;
-  }
+  const buildLevelStartedKey = useCallback(
+    (level: Level, analyticsOverride?: typeof analytics) =>
+      `${analyticsOverride?.runId ?? analytics?.runId ?? "anon"}:${level.id}:${level.number}`,
+    [analytics?.runId],
+  );
 
-  function emitLevelStarted(level: Level, analyticsOverride?: typeof analytics) {
-    captureClientAnalyticsEvent({
-      name: "level_started",
-      occurredAt: new Date().toISOString(),
-      anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? analytics?.anonymousPlayerId,
-      runId: analyticsOverride?.runId ?? analytics?.runId,
-      levelId: level.id,
-      levelNumber: level.number,
-      threshold: level.threshold,
-      attemptWindow: level.maxAttempts,
-    });
-    lastStartedLevelKeyRef.current = buildLevelStartedKey(level, analyticsOverride);
-  }
+  const emitLevelStarted = useCallback(
+    (level: Level, analyticsOverride?: typeof analytics, occurredAt = new Date().toISOString()) => {
+      captureClientAnalyticsEvent({
+        name: "level_started",
+        occurredAt,
+        anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? analytics?.anonymousPlayerId,
+        ...(analyticsOverride?.runId ?? analytics?.runId
+          ? {
+              runId: analyticsOverride?.runId ?? analytics?.runId,
+            }
+          : {}),
+        levelId: level.id,
+        levelNumber: level.number,
+        threshold: level.threshold,
+        attemptWindow: level.maxAttempts,
+      });
+      lastStartedLevelKeyRef.current = buildLevelStartedKey(level, analyticsOverride);
+    },
+    [analytics?.anonymousPlayerId, analytics?.runId, buildLevelStartedKey],
+  );
 
   async function mutateLevelProgress(endpoint: string | undefined, levelId: string) {
     if (!endpoint) {
@@ -212,11 +221,12 @@ export function ActiveLevelScreen({
           progress: body.progress,
         }),
       );
+      const occurredAt = new Date().toISOString();
 
       if (endpoint === restartLevelEndpoint) {
         captureClientAnalyticsEvent({
           name: "level_restarted",
-          occurredAt: new Date().toISOString(),
+          occurredAt,
           anonymousPlayerId: body.progress.playerId,
           runId: body.progress.runId,
           levelId: currentLevel.id,
@@ -226,10 +236,14 @@ export function ActiveLevelScreen({
         });
       }
 
-      emitLevelStarted(currentLevel, {
-        anonymousPlayerId: body.progress.playerId,
-        runId: body.progress.runId,
-      });
+      emitLevelStarted(
+        currentLevel,
+        {
+          anonymousPlayerId: body.progress.playerId,
+          runId: body.progress.runId,
+        },
+        occurredAt,
+      );
       setScreenMode("active");
       return true;
     } catch {
@@ -332,7 +346,7 @@ export function ActiveLevelScreen({
     }
 
     emitLevelStarted(state.level);
-  }, [analytics?.anonymousPlayerId, analytics?.runId, screenMode, state.level]);
+  }, [buildLevelStartedKey, emitLevelStarted, screenMode, state.level]);
 
   async function submitPrompt() {
     const trimmedPrompt = promptText.trim();

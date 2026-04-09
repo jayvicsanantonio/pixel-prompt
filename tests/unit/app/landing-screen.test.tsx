@@ -61,6 +61,8 @@ describe("LandingScreen", () => {
     captureClientAnalyticsEvent.mockClear();
 
     fireEvent.click(screen.getByRole("link", { name: "Start Game" }));
+    fireEvent.click(screen.getByRole("link", { name: "Start Game" }));
+    fireEvent.click(screen.getByRole("link", { name: "Resume Level 2" }));
     fireEvent.click(screen.getByRole("link", { name: "Resume Level 2" }));
 
     expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([

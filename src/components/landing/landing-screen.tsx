@@ -28,6 +28,8 @@ const learningSteps = [
 
 export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   const hasTrackedLandingView = useRef(false);
+  const hasTrackedStartClick = useRef(false);
+  const hasTrackedResumeClick = useRef(false);
   const resumeLabel = landingState.resume.available
     ? `Resume Level ${landingState.resume.currentLevelNumber}`
     : "Resume saved run";
@@ -58,6 +60,11 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   }, [landingState.resume]);
 
   function handleStartClick() {
+    if (hasTrackedStartClick.current) {
+      return;
+    }
+
+    hasTrackedStartClick.current = true;
     captureClientAnalyticsEvent({
       name: "game_started",
       occurredAt: new Date().toISOString(),
@@ -70,6 +77,11 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
       return;
     }
 
+    if (hasTrackedResumeClick.current) {
+      return;
+    }
+
+    hasTrackedResumeClick.current = true;
     const occurredAt = new Date().toISOString();
 
     captureClientAnalyticsEvent({

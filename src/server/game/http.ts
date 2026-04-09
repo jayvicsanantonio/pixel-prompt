@@ -74,6 +74,16 @@ interface ScoredSubmissionEvaluation {
     | null;
 }
 
+class SubmissionPreparationError extends Error {
+  constructor(
+    message: string,
+    readonly code: "run_complete" | "level_changed" | "restart_required",
+  ) {
+    super(message);
+    this.name = "SubmissionPreparationError";
+  }
+}
+
 function sanitizeAttemptForResponse(attemptResult: RecordAttemptResult["attempt"]) {
   return {
     ...attemptResult,
@@ -93,17 +103,23 @@ function resolveSubmissionPreparation(input: {
   const activeLevel = resolveActiveLevel(input.session.progress, levels);
 
   if (!activeLevel) {
-    throw new Error("No active level is available for submission.");
+    throw new SubmissionPreparationError("No active level is available for submission.", "run_complete");
   }
 
   const activeLevelProgress = input.session.progress.levels.find((levelProgress) => levelProgress.levelId === activeLevel.id);
 
   if (activeLevel.id !== input.levelId) {
-    throw new Error("The current level changed while this submission was being processed.");
+    throw new SubmissionPreparationError(
+      "The current level changed while this submission was being processed.",
+      "level_changed",
+    );
   }
 
   if (activeLevelProgress?.status === "failed") {
-    throw new Error("This level has no attempts left. Restart it before submitting again.");
+    throw new SubmissionPreparationError(
+      "This level has no attempts left. Restart it before submitting again.",
+      "restart_required",
+    );
   }
 
   const attemptCycle = activeLevelProgress?.currentAttemptCycle ?? 1;
@@ -668,39 +684,15 @@ export async function handleSubmitAttempt(request: Request) {
           sessionToken: preparedSession.token,
         });
       } catch (error) {
-        if (error instanceof Error) {
-          if (error.message === "No active level is available for submission.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "run_complete",
-                message: error.message,
-              },
-            };
-          }
-
-          if (error.message === "The current level changed while this submission was being processed.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "level_changed",
-                message: error.message,
-              },
-            };
-          }
-
-          if (error.message === "This level has no attempts left. Restart it before submitting again.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "restart_required",
-                message: error.message,
-              },
-            };
-          }
+        if (error instanceof SubmissionPreparationError) {
+          return {
+            status: 409,
+            body: {
+              ok: false,
+              code: error.code,
+              message: error.message,
+            },
+          };
         }
 
         throw error;
@@ -783,39 +775,15 @@ export async function handleSubmitAttempt(request: Request) {
           };
         });
       } catch (error) {
-        if (error instanceof Error) {
-          if (error.message === "No active level is available for submission.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "run_complete",
-                message: error.message,
-              },
-            };
-          }
-
-          if (error.message === "The current level changed while this submission was being processed.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "level_changed",
-                message: error.message,
-              },
-            };
-          }
-
-          if (error.message === "This level has no attempts left. Restart it before submitting again.") {
-            return {
-              status: 409,
-              body: {
-                ok: false,
-                code: "restart_required",
-                message: error.message,
-              },
-            };
-          }
+        if (error instanceof SubmissionPreparationError) {
+          return {
+            status: 409,
+            body: {
+              ok: false,
+              code: error.code,
+              message: error.message,
+            },
+          };
         }
 
         throw error;

@@ -687,6 +687,17 @@ describe("ActiveLevelScreen", () => {
         bestScoreBeforeRestart: 59,
       }),
     );
+    expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        name: "level_started",
+        runId: "run-1",
+        levelId: "level-2",
+        levelNumber: 2,
+        threshold: 60,
+        attemptWindow: 3,
+      }),
+    );
   });
 
   it("replays a cleared level from the summary through the live replay endpoint", async () => {

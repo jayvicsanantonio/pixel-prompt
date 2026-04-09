@@ -204,7 +204,7 @@ export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
     return event.anonymousPlayerId;
   }
 
-  if ("runId" in event) {
+  if ("runId" in event && typeof event.runId === "string" && event.runId.trim().length > 0) {
     return `run:${event.runId}`;
   }
 
