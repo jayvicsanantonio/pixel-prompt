@@ -213,7 +213,17 @@ describe("game http handlers", () => {
   it("recovers resume and submission flows when stored progress references an unavailable current level", async () => {
     const sessionToken = await createSessionToken();
 
-    await submitAttempt(sessionToken, "level-1", "sunlit still life of pears and a bottle on a wooden table");
+    const setupSubmitResponse = await submitAttempt(
+      sessionToken,
+      "level-1",
+      "sunlit still life of pears and a bottle on a wooden table",
+    );
+    expect(setupSubmitResponse.status).toBe(200);
+    await expect(setupSubmitResponse.json()).resolves.toMatchObject({
+      ok: true,
+      transition: "passed",
+    });
+
     await mutateSession(sessionToken, (session) => ({
       session: {
         ...session,

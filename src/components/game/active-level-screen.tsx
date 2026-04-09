@@ -59,6 +59,14 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(", ");
 
+function safeCaptureClientAnalyticsEvent(event: Parameters<typeof captureClientAnalyticsEvent>[0]) {
+  try {
+    captureClientAnalyticsEvent(event);
+  } catch {
+    // Telemetry failures must never block gameplay transitions.
+  }
+}
+
 function buildLiveScreenState(input: {
   previousState: ActiveLevelScreenState;
   transition: SubmitAttemptSuccessResponse["transition"];
@@ -165,7 +173,7 @@ export function ActiveLevelScreen({
 
   const emitLevelStarted = useCallback(
     (level: Level, analyticsOverride?: ActiveLevelScreenState["analytics"], occurredAt = new Date().toISOString()) => {
-      captureClientAnalyticsEvent({
+      safeCaptureClientAnalyticsEvent({
         name: "level_started",
         occurredAt,
         anonymousPlayerId: analyticsOverride?.anonymousPlayerId ?? state.analytics?.anonymousPlayerId,
@@ -229,7 +237,7 @@ export function ActiveLevelScreen({
       const occurredAt = new Date().toISOString();
 
       if (endpoint === restartLevelEndpoint) {
-        captureClientAnalyticsEvent({
+        safeCaptureClientAnalyticsEvent({
           name: "level_restarted",
           occurredAt,
           anonymousPlayerId: body.progress.playerId,

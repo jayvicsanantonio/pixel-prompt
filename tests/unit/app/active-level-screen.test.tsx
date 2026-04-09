@@ -758,6 +758,109 @@ describe("ActiveLevelScreen", () => {
     );
   });
 
+  it("keeps the restart transition successful when client analytics throws", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          currentLevel: levels[1],
+          landing: {
+            startHref: "/play?level=1",
+            resume: {
+              available: true,
+              href: "/play?level=2&resume=1",
+              currentLevelNumber: 2,
+              currentLevelTitle: "Midnight Alley Portrait",
+              levelsCleared: 1,
+              attemptsRemaining: 3,
+              bestScore: 59,
+              helperText: "Pick up the same run without replaying cleared progress.",
+            },
+          },
+          progress: {
+            playerId: "player-1",
+            runId: "run-1",
+            currentLevelId: "level-2",
+            highestUnlockedLevelNumber: 2,
+            totalAttemptsUsed: 3,
+            canResume: true,
+            lastActiveAt: "2026-04-07T08:10:00.000Z",
+            levels: [
+              {
+                levelId: "level-1",
+                status: "passed",
+                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 68,
+                strongestAttemptId: "attempt-live-1",
+                unlockedAt: "2026-04-07T08:00:00.000Z",
+                completedAt: "2026-04-07T08:00:00.000Z",
+                lastCompletedAt: "2026-04-07T08:00:00.000Z",
+                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
+              },
+              {
+                levelId: "level-2",
+                status: "in_progress",
+                currentAttemptCycle: 2,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: 59,
+                strongestAttemptId: "attempt-live-2",
+                unlockedAt: "2026-04-07T08:05:00.000Z",
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: "2026-04-07T08:10:00.000Z",
+              },
+              {
+                levelId: "level-3",
+                status: "locked",
+                currentAttemptCycle: 1,
+                attemptsUsed: 0,
+                attemptsRemaining: 3,
+                bestScore: null,
+                strongestAttemptId: null,
+                unlockedAt: null,
+                completedAt: null,
+                lastCompletedAt: null,
+                lastAttemptedAt: null,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const exhaustedState = getMockActiveLevelState({ levelNumber: 2, resume: true, attemptsUsed: 2 });
+    render(<ActiveLevelScreen state={exhaustedState} restartLevelEndpoint="/api/game/restart-level" />);
+
+    captureClientAnalyticsEvent.mockClear();
+    captureClientAnalyticsEvent.mockImplementation(() => {
+      throw new Error("posthog unavailable");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Result" }));
+    fireEvent.click(screen.getByRole("button", { name: "See Failure State" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart Level" }));
+
+    expect(await screen.findByText("2. Midnight Alley Portrait")).toBeInTheDocument();
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue("");
+    expect(screen.queryByText("That action did not go through. Try again.")).not.toBeInTheDocument();
+    expect(captureClientAnalyticsEvent.mock.calls.map(([event]) => event.name)).toEqual([
+      "level_restarted",
+      "level_started",
+    ]);
+  });
+
   it("replays a cleared level from the summary through the live replay endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
