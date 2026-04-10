@@ -7,10 +7,13 @@ import { POST as postReplayLevel } from "@/app/api/game/replay-level/route";
 import { POST as postRestartLevel } from "@/app/api/game/restart-level/route";
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
+import {
+  resetInMemoryRequestRateLimitStoreForTests,
+  resetPersistedRequestRateLimitBucketsForTests,
+} from "@/server/game/request-rate-limit";
+import { getOrCreateSession, mutateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
 import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
 import type { ImageGenerationProvider } from "@/server/providers/contracts";
-import { resetRequestRateLimitStoreForTests } from "@/server/game/request-rate-limit";
-import { getOrCreateSession, mutateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
 import * as imageGenerationProviderModule from "@/server/providers/image-generation";
 
 function getCookieHeader(response: Response) {
@@ -70,7 +73,8 @@ describe("game http handlers", () => {
     await rm(targetAssetDir, { recursive: true, force: true });
     await seedMockTargetAssets(targetAssetDir, ["level-1"]);
     resetSessionStoreForTests();
-    resetRequestRateLimitStoreForTests();
+    resetInMemoryRequestRateLimitStoreForTests();
+    await resetPersistedRequestRateLimitBucketsForTests();
   });
 
   afterEach(async () => {
@@ -887,7 +891,7 @@ describe("game http handlers", () => {
     });
   });
 
-  it("keys anonymous fingerprints off the client IP even when x-forwarded-for contains proxy hops", async () => {
+  it("prefers x-real-ip over x-forwarded-for when both headers are present", async () => {
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "1";
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
@@ -898,7 +902,51 @@ describe("game http handlers", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "user-agent": "pixel-prompt-proxy-test",
+          "x-forwarded-for": "198.51.100.10, 10.0.0.2",
+          "x-real-ip": "203.0.113.10",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(firstResponse.status).toBe(200);
+
+    const throttledResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": "198.51.100.11, 10.0.0.3",
+          "x-real-ip": "203.0.113.10",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(throttledResponse.status).toBe(429);
+    await expect(throttledResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "submit_rate_limited",
+    });
+  });
+
+  it("falls back to the right-most x-forwarded-for hop when trusted single-hop headers are absent", async () => {
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "1";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS = "600";
+
+    const firstResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
           "x-forwarded-for": "203.0.113.10, 10.0.0.2",
         },
         body: JSON.stringify({
@@ -915,8 +963,7 @@ describe("game http handlers", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "user-agent": "pixel-prompt-proxy-test",
-          "x-forwarded-for": "203.0.113.10, 10.0.0.3",
+          "x-forwarded-for": "198.51.100.20, 10.0.0.2",
         },
         body: JSON.stringify({
           levelId: "level-1",

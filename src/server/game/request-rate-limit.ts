@@ -68,6 +68,21 @@ function getFirstHeaderValue(headers: Headers, headerNames: string[]) {
   return null;
 }
 
+function getLastForwardedForHop(headers: Headers) {
+  const forwardedForHeader = getFirstHeaderValue(headers, ["x-forwarded-for"]);
+
+  if (!forwardedForHeader) {
+    return null;
+  }
+
+  const forwardedForHops = forwardedForHeader
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+
+  return forwardedForHops[forwardedForHops.length - 1] ?? null;
+}
+
 function hashKeyPart(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -126,9 +141,10 @@ function getSubmitAttemptPolicies() {
 }
 
 function getAnonymousRequestFingerprint(request: Request) {
-  const forwardedForHeader =
-    getFirstHeaderValue(request.headers, ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]) ?? "";
-  const clientIp = forwardedForHeader.split(",")[0]?.trim() || "unknown-client-ip";
+  const clientIp =
+    getFirstHeaderValue(request.headers, ["x-real-ip", "cf-connecting-ip"])?.trim() ??
+    getLastForwardedForHop(request.headers) ??
+    "unknown-client-ip";
 
   return hashKeyPart(clientIp);
 }
@@ -217,11 +233,15 @@ async function cleanupDatabaseBucketsIfNeeded(now: Date, maxWindowSeconds: numbe
     return;
   }
 
-  globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = nowMs + getCleanupIntervalMs(maxWindowSeconds);
-
-  await getDatabase()
-    .delete(requestRateLimitBuckets)
-    .where(lt(requestRateLimitBuckets.updatedAt, new Date(getStaleBucketCutoff(nowMs, maxWindowSeconds))));
+  try {
+    await getDatabase()
+      .delete(requestRateLimitBuckets)
+      .where(lt(requestRateLimitBuckets.updatedAt, new Date(getStaleBucketCutoff(nowMs, maxWindowSeconds))));
+    globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = nowMs + getCleanupIntervalMs(maxWindowSeconds);
+  } catch (error) {
+    globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = undefined;
+    console.error("Failed to clean up stale request rate-limit buckets.", error);
+  }
 }
 
 function consumeMemoryAllowance(input: {
@@ -394,8 +414,16 @@ export async function consumeSubmitAttemptRateLimit(request: Request, sessionTok
   });
 }
 
-export function resetRequestRateLimitStoreForTests() {
+export function resetInMemoryRequestRateLimitStoreForTests() {
   getRateLimitStore().clear();
   globalThis.__pixelPromptRequestRateLimitNextMemoryPruneAtMs__ = undefined;
   globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = undefined;
+}
+
+export async function resetPersistedRequestRateLimitBucketsForTests() {
+  if (!hasDatabaseUrl()) {
+    return;
+  }
+
+  await getDatabase().delete(requestRateLimitBuckets);
 }
