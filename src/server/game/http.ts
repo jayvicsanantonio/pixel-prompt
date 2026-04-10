@@ -24,6 +24,7 @@ import {
   buildSubmitAttemptAnalyticsEvents,
 } from "./analytics";
 import { buildAttemptResultFromScore, mapProviderFailureToAttemptResult } from "./mock-attempt-evaluator";
+import { consumeSubmitAttemptRateLimit } from "./request-rate-limit";
 import { countPromptCharacters } from "./session-persistence";
 import { getOrCreateSession, getSessionByToken, getSessionCookieAttributes, mutateSession, SESSION_COOKIE_NAME } from "./session-store";
 import { createSubmissionDedupKey, withPendingSubmissionDedup } from "./submission-idempotency";
@@ -303,6 +304,27 @@ function buildProgressMutationResponse(sessionToken: string | undefined, session
       progress: session.progress,
     }),
     sessionToken,
+  );
+}
+
+function buildRateLimitedResponse(input: {
+  code: "submit_rate_limited";
+  message: string;
+  retryAfterSeconds: number;
+}) {
+  return Response.json(
+    {
+      ok: false,
+      code: input.code,
+      message: input.message,
+      retryAfterSeconds: input.retryAfterSeconds,
+    },
+    {
+      status: 429,
+      headers: {
+        "retry-after": String(input.retryAfterSeconds),
+      },
+    },
   );
 }
 
@@ -663,6 +685,19 @@ export async function handleSubmitAttempt(request: Request) {
         status: 409,
       },
     );
+  }
+
+  const rateLimitAllowance = await consumeSubmitAttemptRateLimit(
+    request,
+    existingSession ? sessionToken : undefined,
+  );
+
+  if (rateLimitAllowance && !rateLimitAllowance.allowed) {
+    return buildRateLimitedResponse({
+      code: "submit_rate_limited",
+      message: `You're sending prompts too quickly. Wait ${rateLimitAllowance.retryAfterSeconds} seconds and try again.`,
+      retryAfterSeconds: rateLimitAllowance.retryAfterSeconds,
+    });
   }
 
   const submission = await withPendingSubmissionDedup(

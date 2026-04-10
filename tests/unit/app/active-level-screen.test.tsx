@@ -123,12 +123,17 @@ describe("ActiveLevelScreen", () => {
     const closeButton = screen.getByRole("button", { name: "Close Study View" });
 
     expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAttribute("aria-describedby", "expanded-target-caption");
     expect(closeButton).toHaveFocus();
     expect(
       screen.getByRole("img", {
         name: "Expanded view of A sunlit still life arranged on a wooden table.",
       }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Inspect the composition, spacing, and light here, then jump back into the prompt.")).toHaveAttribute(
+      "id",
+      "expanded-target-caption",
+    );
 
     fireEvent.keyDown(dialog, { key: "Tab" });
     expect(closeButton).toHaveFocus();
@@ -696,6 +701,7 @@ describe("ActiveLevelScreen", () => {
       "This level has no attempts left. Restart the level before submitting again.",
     );
     expect(prompt).toHaveValue("sunlit pears and a bottle on a wooden table");
+    expect(prompt).toHaveAttribute("aria-invalid", "false");
   });
 
   it("renders a result comparison with a player-facing percentage score", () => {

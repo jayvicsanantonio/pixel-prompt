@@ -10,6 +10,7 @@ import {
   levelAttempts,
   levelStatusEnum,
   providerFailureKindEnum,
+  requestRateLimitBuckets,
   runLevelProgress,
   runStatusEnum,
   schema,
@@ -54,6 +55,32 @@ describe("database schema", () => {
         "game_runs_highest_completed_level_number_check",
         "game_runs_completed_not_ahead_of_unlock_check",
         "game_runs_total_attempts_used_check",
+      ]),
+    );
+  });
+
+  it("tracks request-throttle buckets for durable abuse controls", () => {
+    const columns = getTableColumns(requestRateLimitBuckets);
+    const config = getTableConfig(requestRateLimitBuckets);
+
+    expect(Object.keys(columns)).toEqual(
+      expect.arrayContaining([
+        "scopeKey",
+        "scopeType",
+        "action",
+        "windowSeconds",
+        "requestCount",
+        "windowStartedAt",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(config.primaryKeys.map((key) => key.getName())).toContain("request_rate_limit_buckets_pk");
+    expect(config.checks.map((constraint) => constraint.name)).toEqual(
+      expect.arrayContaining([
+        "request_rate_limit_buckets_scope_type_check",
+        "request_rate_limit_buckets_window_seconds_check",
+        "request_rate_limit_buckets_request_count_check",
       ]),
     );
   });
@@ -172,6 +199,7 @@ describe("database schema", () => {
   it("exports the persistence tables through the shared schema object", () => {
     expect(schema).toMatchObject({
       anonymousPlayers,
+      requestRateLimitBuckets,
       gameRuns,
       runLevelProgress,
       levelAttempts,

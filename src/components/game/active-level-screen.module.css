@@ -411,9 +411,9 @@
   line-height: 1.6;
 }
 
-.textarea:focus {
-  outline: 2px solid rgba(177, 79, 31, 0.28);
-  outline-offset: 2px;
+.textarea:focus-visible {
+  outline: 3px solid #7f3617;
+  outline-offset: 3px;
 }
 
 .formFooter {

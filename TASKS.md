@@ -515,8 +515,9 @@ Support:
 
 Tasks:
 
-- add abuse controls and rate limiting
-- verify accessibility, keyboard navigation across all interactive screens, color contrast, and non-color state signaling
+- [x] add submit-attempt abuse controls and rate limiting (server-side fixed-window throttling now protects the costly generation/scoring path with session/fingerprint scope plus configurable burst and sustained limits)
+- [x] evaluate whether restart/replay mutations need separate throttles before external user testing (kept unthrottled for MVP limited testing because both routes are session-gated, AI-free, and already blocked outside failed/passed states; see `docs/foundation/abuse-controls-and-rate-limiting.md`)
+- [x] verify accessibility, keyboard navigation across all interactive screens, color contrast, and non-color state signaling (shared focus rings, corrected prompt-vs-system error semantics, and dialog description audit documented in `docs/foundation/accessibility-audit-2026-04-09.md`)
 - run copy audit for short, concrete, beginner-friendly language
 - improve loading and failure states
 - verify responsive behavior across mobile, tablet, and desktop breakpoints

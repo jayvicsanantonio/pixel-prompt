@@ -41,3 +41,12 @@ a {
   color: inherit;
   text-decoration: none;
 }
+
+:where(a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 3px solid #7f3617;
+  outline-offset: 3px;
+}
+
+:where(a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])):focus:not(:focus-visible) {
+  outline: none;
+}

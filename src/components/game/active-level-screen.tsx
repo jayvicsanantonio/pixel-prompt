@@ -56,6 +56,16 @@ interface ProgressMutationErrorResponse {
   message: string;
 }
 
+type ScreenFeedback =
+  | {
+      kind: "prompt";
+      message: string;
+    }
+  | {
+      kind: "system";
+      message: string;
+    };
+
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -200,7 +210,7 @@ export function ActiveLevelScreen({
 }: ActiveLevelScreenProps) {
   const [state, setState] = useState(initialState);
   const [promptText, setPromptText] = useState(initialState.promptDraft);
-  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ScreenFeedback | null>(null);
   const [screenMode, setScreenMode] = useState<
     "active" | "generating" | "result" | "success" | "retry" | "failure" | "summary"
   >(initialState.initialScreenMode ?? "active");
@@ -215,7 +225,7 @@ export function ActiveLevelScreen({
   const characterCount = promptText.length;
   const characterLimit = state.level.promptCharacterLimit;
   const isOverLimit = characterCount > characterLimit;
-  const promptFeedbackId = validationMessage ? "prompt-feedback" : undefined;
+  const promptFeedbackId = feedback?.kind === "prompt" ? "prompt-feedback" : undefined;
   const promptDescribedBy = ["prompt-guidance", "prompt-counter", promptFeedbackId].filter(Boolean).join(" ");
   const playerFacingScore = toPlayerFacingScore(state.resultPreview.score);
   const hasRetryRemaining = state.continuation.attemptsRemainingAfterResult > 0;
@@ -272,12 +282,15 @@ export function ActiveLevelScreen({
       const currentLevel = body.ok ? body.currentLevel : null;
 
       if (!body.ok || !currentLevel) {
-        setValidationMessage(body.ok ? uiCopy.gameplay.errors.actionFailed : body.message);
+        setFeedback({
+          kind: "system",
+          message: body.ok ? uiCopy.gameplay.errors.actionFailed : body.message,
+        });
         setScreenMode("active");
         return false;
       }
 
-      setValidationMessage(null);
+      setFeedback(null);
       setSubmittedPrompt("");
       setPromptText("");
       setState((previousState) =>
@@ -319,7 +332,10 @@ export function ActiveLevelScreen({
       setScreenMode("active");
       return true;
     } catch {
-      setValidationMessage(uiCopy.gameplay.errors.actionFailed);
+      setFeedback({
+        kind: "system",
+        message: uiCopy.gameplay.errors.actionFailed,
+      });
       setScreenMode("active");
       return false;
     } finally {
@@ -331,7 +347,7 @@ export function ActiveLevelScreen({
     setState(initialState);
     setPromptText(initialState.promptDraft);
     setSubmittedPrompt(initialState.promptDraft);
-    setValidationMessage(null);
+    setFeedback(null);
     setScreenMode(initialState.initialScreenMode ?? "active");
     setIsSubmitting(false);
     setIsTargetExpanded(false);
@@ -431,16 +447,22 @@ export function ActiveLevelScreen({
     const trimmedPrompt = promptText.trim();
 
     if (trimmedPrompt.length === 0) {
-      setValidationMessage(uiCopy.gameplay.active.emptyValidation);
+      setFeedback({
+        kind: "prompt",
+        message: uiCopy.gameplay.active.emptyValidation,
+      });
       return;
     }
 
     if (characterCount > characterLimit) {
-      setValidationMessage(uiCopy.gameplay.active.buildOverLimitValidation(characterLimit));
+      setFeedback({
+        kind: "prompt",
+        message: uiCopy.gameplay.active.buildOverLimitValidation(characterLimit),
+      });
       return;
     }
 
-    setValidationMessage(null);
+    setFeedback(null);
     setSubmittedPrompt(trimmedPrompt);
 
     if (!submissionEndpoint) {
@@ -465,13 +487,19 @@ export function ActiveLevelScreen({
       const body = (await response.json()) as SubmitAttemptSuccessResponse | SubmitAttemptErrorResponse;
 
       if (!body.ok) {
-        setValidationMessage(body.message);
+        setFeedback({
+          kind: body.code === "empty_prompt" || body.code === "prompt_too_long" ? "prompt" : "system",
+          message: body.message,
+        });
         setScreenMode("active");
         return;
       }
 
       if (!body.attempt.result.score) {
-        setValidationMessage(body.attempt.result.errorMessage ?? uiCopy.gameplay.errors.attemptIncomplete);
+        setFeedback({
+          kind: "system",
+          message: body.attempt.result.errorMessage ?? uiCopy.gameplay.errors.attemptIncomplete,
+        });
         setScreenMode("active");
         return;
       }
@@ -494,7 +522,10 @@ export function ActiveLevelScreen({
       setPromptText(trimmedPrompt);
       setScreenMode("result");
     } catch {
-      setValidationMessage(uiCopy.gameplay.errors.submitFailed);
+      setFeedback({
+        kind: "system",
+        message: uiCopy.gameplay.errors.submitFailed,
+      });
       setScreenMode("active");
     } finally {
       setIsSubmitting(false);
@@ -777,7 +808,7 @@ export function ActiveLevelScreen({
             <textarea
               id="prompt"
               aria-describedby={promptDescribedBy}
-              aria-invalid={validationMessage !== null}
+              aria-invalid={feedback?.kind === "prompt"}
               className={styles.textarea}
               name="prompt"
               placeholder={uiCopy.gameplay.active.placeholder}
@@ -785,8 +816,8 @@ export function ActiveLevelScreen({
               onChange={(event) => {
                 setPromptText(event.target.value);
 
-                if (validationMessage !== null) {
-                  setValidationMessage(null);
+                if (feedback?.kind === "prompt") {
+                  setFeedback(null);
                 }
               }}
               onKeyDown={(event) => {
@@ -810,9 +841,9 @@ export function ActiveLevelScreen({
             <span id="prompt-guidance">{uiCopy.gameplay.active.guidance}</span>
           </p>
 
-          {validationMessage ? (
+          {feedback ? (
             <p className={`${styles.feedback} ${styles.error}`} id="prompt-feedback" role="alert">
-              {validationMessage}
+              {feedback.message}
             </p>
           ) : null}
 
@@ -1241,6 +1272,7 @@ export function ActiveLevelScreen({
           role="dialog"
           aria-modal="true"
           aria-labelledby="expanded-target-title"
+          aria-describedby="expanded-target-caption"
           tabIndex={-1}
           onClick={(event) => {
             if (event.target === event.currentTarget) {
@@ -1263,7 +1295,9 @@ export function ActiveLevelScreen({
 
             {renderTargetStudyFrame(`Expanded view of ${state.level.targetImage.alt}`, true)}
 
-            <p className={styles.targetCaption}>{uiCopy.gameplay.targetPanel.expandedCaption}</p>
+            <p className={styles.targetCaption} id="expanded-target-caption">
+              {uiCopy.gameplay.targetPanel.expandedCaption}
+            </p>
           </div>
         </div>
       ) : null}

@@ -9,6 +9,7 @@ import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { MOCK_IMAGE_PNG_BASE64, seedMockTargetAssets } from "@/server/providers";
 import type { ImageGenerationProvider } from "@/server/providers/contracts";
+import { resetRequestRateLimitStoreForTests } from "@/server/game/request-rate-limit";
 import { getOrCreateSession, mutateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
 import * as imageGenerationProviderModule from "@/server/providers/image-generation";
 
@@ -52,6 +53,10 @@ describe("game http handlers", () => {
   const originalEnableOpenAiInTests = process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
   const originalEnableOpenAiScoring = process.env.PIXEL_PROMPT_ENABLE_OPENAI_SCORING;
   const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+  const originalSubmitBurstLimit = process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX;
+  const originalSubmitBurstWindowSeconds = process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS;
+  const originalSubmitSustainedLimit = process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX;
+  const originalSubmitSustainedWindowSeconds = process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS;
   const originalTargetAssetDir = process.env.PIXEL_PROMPT_TARGET_ASSET_DIR;
   let generatedOutputDir = "";
   let targetAssetDir = "";
@@ -65,6 +70,7 @@ describe("game http handlers", () => {
     await rm(targetAssetDir, { recursive: true, force: true });
     await seedMockTargetAssets(targetAssetDir, ["level-1"]);
     resetSessionStoreForTests();
+    resetRequestRateLimitStoreForTests();
   });
 
   afterEach(async () => {
@@ -93,6 +99,30 @@ describe("game http handlers", () => {
       delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
     } else {
       process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = originalGeneratedOutputDir;
+    }
+
+    if (originalSubmitBurstLimit === undefined) {
+      delete process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX;
+    } else {
+      process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = originalSubmitBurstLimit;
+    }
+
+    if (originalSubmitBurstWindowSeconds === undefined) {
+      delete process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS;
+    } else {
+      process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = originalSubmitBurstWindowSeconds;
+    }
+
+    if (originalSubmitSustainedLimit === undefined) {
+      delete process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX;
+    } else {
+      process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = originalSubmitSustainedLimit;
+    }
+
+    if (originalSubmitSustainedWindowSeconds === undefined) {
+      delete process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS;
+    } else {
+      process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS = originalSubmitSustainedWindowSeconds;
     }
 
     if (originalTargetAssetDir === undefined) {
@@ -721,6 +751,90 @@ describe("game http handlers", () => {
     await expect(mismatchResponse.json()).resolves.toMatchObject({
       ok: false,
       code: "level_mismatch",
+    });
+  });
+
+  it("returns a 429 and preserves attempts when the submit burst limit is exceeded", async () => {
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "2";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS = "600";
+    const sessionToken = await createSessionToken();
+
+    const firstResponse = await submitAttempt(sessionToken, "level-1", "vague");
+    const secondResponse = await submitAttempt(sessionToken, "level-1", "vague");
+    const throttledResponse = await submitAttempt(sessionToken, "level-1", "vague");
+
+    expect(firstResponse.status).toBe(200);
+    expect(secondResponse.status).toBe(200);
+    expect(throttledResponse.status).toBe(429);
+    expect(throttledResponse.headers.get("retry-after")).toBeTruthy();
+    await expect(throttledResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "submit_rate_limited",
+      retryAfterSeconds: expect.any(Number),
+    });
+
+    const resumedResponse = await getResumeProgress(
+      new Request("http://localhost/api/game/resume-progress", {
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+        },
+      }),
+    );
+    const resumedBody = await resumedResponse.json();
+
+    expect(resumedBody.progress.totalAttemptsUsed).toBe(2);
+    expect(resumedBody.progress.levels[0]).toMatchObject({
+      levelId: "level-1",
+      attemptsUsed: 2,
+      attemptsRemaining: 1,
+    });
+  });
+
+  it("falls back to the anonymous fingerprint bucket when the session cookie is unrecognized", async () => {
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "1";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS = "600";
+
+    const firstResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "pixel-prompt-test",
+          "x-forwarded-for": "203.0.113.10",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(firstResponse.status).toBe(200);
+
+    const throttledResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE_NAME}=session-does-not-exist`,
+          "user-agent": "pixel-prompt-test",
+          "x-forwarded-for": "203.0.113.10",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(throttledResponse.status).toBe(429);
+    await expect(throttledResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "submit_rate_limited",
     });
   });
 

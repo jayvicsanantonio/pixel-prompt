@@ -48,6 +48,33 @@ export const anonymousPlayers = pgTable(
   ],
 );
 
+export const requestRateLimitBuckets = pgTable(
+  "request_rate_limit_buckets",
+  {
+    scopeKey: text("scope_key").notNull(),
+    scopeType: text("scope_type").notNull(),
+    action: text("action").notNull(),
+    windowSeconds: integer("window_seconds").notNull(),
+    requestCount: integer("request_count").notNull().default(0),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.scopeKey, table.action, table.windowSeconds],
+      name: "request_rate_limit_buckets_pk",
+    }),
+    index("request_rate_limit_buckets_updated_at_idx").on(table.updatedAt),
+    check(
+      "request_rate_limit_buckets_scope_type_check",
+      sql`${table.scopeType} in ('session', 'anonymous_fingerprint')`,
+    ),
+    check("request_rate_limit_buckets_window_seconds_check", sql`${table.windowSeconds} >= 1`),
+    check("request_rate_limit_buckets_request_count_check", sql`${table.requestCount} >= 0`),
+  ],
+);
+
 export const gameRuns = pgTable(
   "game_runs",
   {
@@ -196,6 +223,7 @@ export const levelAttempts = pgTable(
 
 export const schema = {
   anonymousPlayers,
+  requestRateLimitBuckets,
   gameRuns,
   runLevelProgress,
   levelAttempts,
@@ -203,6 +231,8 @@ export const schema = {
 
 export type AnonymousPlayerRecord = typeof anonymousPlayers.$inferSelect;
 export type NewAnonymousPlayerRecord = typeof anonymousPlayers.$inferInsert;
+export type RequestRateLimitBucketRecord = typeof requestRateLimitBuckets.$inferSelect;
+export type NewRequestRateLimitBucketRecord = typeof requestRateLimitBuckets.$inferInsert;
 export type GameRunRecord = typeof gameRuns.$inferSelect;
 export type NewGameRunRecord = typeof gameRuns.$inferInsert;
 export type RunLevelProgressRecord = typeof runLevelProgress.$inferSelect;
