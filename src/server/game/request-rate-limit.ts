@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { lt, sql } from "drizzle-orm";
 
 import { getDatabase, hasDatabaseUrl, requestRateLimitBuckets } from "@/server/db";
 import { hashSessionToken } from "./session-store";
@@ -10,6 +10,7 @@ export type RateLimitScopeType = "session" | "anonymous_fingerprint";
 type RateLimitedAction = "submit_attempt";
 
 interface RateLimitPolicy {
+  key: "burst" | "sustained";
   limit: number;
   windowSeconds: number;
 }
@@ -36,6 +37,8 @@ interface RateLimitAllowance {
 
 declare global {
   var __pixelPromptRequestRateLimitStore__: Map<string, RateLimitBucketState> | undefined;
+  var __pixelPromptRequestRateLimitNextMemoryPruneAtMs__: number | undefined;
+  var __pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__: number | undefined;
 }
 
 const DEFAULT_SUBMIT_ATTEMPT_BURST_LIMIT = 8;
@@ -86,8 +89,9 @@ function parsePositiveIntegerEnv(name: string, fallbackValue: number) {
 }
 
 function getSubmitAttemptPolicies() {
-  return [
+  const policies = [
     {
+      key: "burst" as const,
       limit: parsePositiveIntegerEnv(
         "PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX",
         DEFAULT_SUBMIT_ATTEMPT_BURST_LIMIT,
@@ -98,6 +102,7 @@ function getSubmitAttemptPolicies() {
       ),
     },
     {
+      key: "sustained" as const,
       limit: parsePositiveIntegerEnv(
         "PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX",
         DEFAULT_SUBMIT_ATTEMPT_SUSTAINED_LIMIT,
@@ -108,10 +113,22 @@ function getSubmitAttemptPolicies() {
       ),
     },
   ].sort((left, right) => left.windowSeconds - right.windowSeconds);
+
+  const uniqueWindowSeconds = new Set(policies.map((policy) => policy.windowSeconds));
+
+  if (uniqueWindowSeconds.size !== policies.length) {
+    throw new Error(
+      "Submit-attempt rate-limit windows must be distinct so burst and sustained policies never share the same bucket.",
+    );
+  }
+
+  return policies;
 }
 
 function getAnonymousRequestFingerprint(request: Request) {
-  const forwardedFor = getFirstHeaderValue(request.headers, ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]) ?? "";
+  const forwardedForHeader =
+    getFirstHeaderValue(request.headers, ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]) ?? "";
+  const forwardedFor = forwardedForHeader.split(",")[0]?.trim() ?? "";
   const userAgent = request.headers.get("user-agent") ?? "";
   const acceptLanguage = request.headers.get("accept-language") ?? "";
   const clientHints = getFirstHeaderValue(request.headers, ["sec-ch-ua", "sec-ch-ua-platform"]) ?? "";
@@ -134,7 +151,7 @@ function resolveRateLimitScope(request: Request, sessionToken?: string): RateLim
 }
 
 function buildBucketKey(scope: RateLimitScope, action: RateLimitedAction, policy: RateLimitPolicy) {
-  return `${scope.key}:${action}:${policy.windowSeconds}`;
+  return `${scope.key}:${action}:${policy.key}:${policy.windowSeconds}`;
 }
 
 function calculateAllowance(input: {
@@ -162,15 +179,52 @@ function calculateAllowance(input: {
   } satisfies RateLimitAllowance;
 }
 
+function getCleanupIntervalMs(maxWindowSeconds: number) {
+  return Math.max(1_000, Math.min(maxWindowSeconds * 1_000, 60_000));
+}
+
+function getStaleBucketCutoff(nowMs: number, maxWindowSeconds: number) {
+  return nowMs - maxWindowSeconds * 1_000;
+}
+
 function pruneMemoryBuckets(nowMs: number, maxWindowSeconds: number) {
   const store = getRateLimitStore();
-  const oldestAllowedUpdatedAtMs = nowMs - maxWindowSeconds * 2 * 1000;
+  const staleBucketCutoff = getStaleBucketCutoff(nowMs, maxWindowSeconds);
 
   for (const [key, bucket] of store.entries()) {
-    if (bucket.updatedAtMs < oldestAllowedUpdatedAtMs) {
+    if (bucket.updatedAtMs < staleBucketCutoff) {
       store.delete(key);
     }
   }
+}
+
+function pruneMemoryBucketsIfNeeded(nowMs: number, maxWindowSeconds: number) {
+  if (
+    globalThis.__pixelPromptRequestRateLimitNextMemoryPruneAtMs__ != null &&
+    nowMs < globalThis.__pixelPromptRequestRateLimitNextMemoryPruneAtMs__
+  ) {
+    return;
+  }
+
+  globalThis.__pixelPromptRequestRateLimitNextMemoryPruneAtMs__ = nowMs + getCleanupIntervalMs(maxWindowSeconds);
+  pruneMemoryBuckets(nowMs, maxWindowSeconds);
+}
+
+async function cleanupDatabaseBucketsIfNeeded(now: Date, maxWindowSeconds: number) {
+  const nowMs = now.getTime();
+
+  if (
+    globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ != null &&
+    nowMs < globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__
+  ) {
+    return;
+  }
+
+  globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = nowMs + getCleanupIntervalMs(maxWindowSeconds);
+
+  await getDatabase()
+    .delete(requestRateLimitBuckets)
+    .where(lt(requestRateLimitBuckets.updatedAt, new Date(getStaleBucketCutoff(nowMs, maxWindowSeconds))));
 }
 
 function consumeMemoryAllowance(input: {
@@ -181,7 +235,7 @@ function consumeMemoryAllowance(input: {
 }) {
   const nowMs = input.now.getTime();
   const maxWindowSeconds = input.policies.reduce((maximum, policy) => Math.max(maximum, policy.windowSeconds), 0);
-  pruneMemoryBuckets(nowMs, maxWindowSeconds);
+  pruneMemoryBucketsIfNeeded(nowMs, maxWindowSeconds);
   const store = getRateLimitStore();
   const allowances = input.policies.map((policy) => {
     const bucketKey = buildBucketKey(input.scope, input.action, policy);
@@ -237,63 +291,58 @@ async function consumeDatabaseAllowance(input: {
   policies: RateLimitPolicy[];
   scope: RateLimitScope;
 }) {
+  const maxWindowSeconds = input.policies.reduce((maximum, policy) => Math.max(maximum, policy.windowSeconds), 0);
+  await cleanupDatabaseBucketsIfNeeded(input.now, maxWindowSeconds);
+
   return getDatabase().transaction(async (tx) => {
     const blockedAllowances: RateLimitAllowance[] = [];
 
     for (const policy of input.policies) {
       const bucketKey = buildBucketKey(input.scope, input.action, policy);
       await lockRateLimitBucket(tx, bucketKey);
-
-      const existingBucket = await tx
-        .select()
-        .from(requestRateLimitBuckets)
-        .where(
-          and(
-            eq(requestRateLimitBuckets.scopeKey, input.scope.key),
-            eq(requestRateLimitBuckets.action, input.action),
-            eq(requestRateLimitBuckets.windowSeconds, policy.windowSeconds),
-          ),
-        )
-        .limit(1);
-      const bucket = existingBucket[0];
       const windowMs = policy.windowSeconds * 1000;
-      const windowStartedAt =
-        bucket != null && input.now.getTime() - bucket.windowStartedAt.getTime() < windowMs
-          ? bucket.windowStartedAt
-          : input.now;
-      const requestCount =
-        bucket != null && input.now.getTime() - bucket.windowStartedAt.getTime() < windowMs
-          ? bucket.requestCount + 1
-          : 1;
-
-      if (bucket == null) {
-        await tx.insert(requestRateLimitBuckets).values({
+      const windowResetBefore = new Date(input.now.getTime() - windowMs);
+      const [bucket] = await tx
+        .insert(requestRateLimitBuckets)
+        .values({
           scopeKey: input.scope.key,
           scopeType: input.scope.type,
           action: input.action,
           windowSeconds: policy.windowSeconds,
-          requestCount,
-          windowStartedAt,
+          requestCount: 1,
+          windowStartedAt: input.now,
           createdAt: input.now,
           updatedAt: input.now,
-        });
-      } else {
-        await tx
-          .update(requestRateLimitBuckets)
-          .set({
-            requestCount,
+        })
+        .onConflictDoUpdate({
+          target: [
+            requestRateLimitBuckets.scopeKey,
+            requestRateLimitBuckets.action,
+            requestRateLimitBuckets.windowSeconds,
+          ],
+          set: {
             scopeType: input.scope.type,
-            windowStartedAt,
+            requestCount: sql<number>`case
+              when ${requestRateLimitBuckets.windowStartedAt} > ${windowResetBefore}
+                then ${requestRateLimitBuckets.requestCount} + 1
+              else 1
+            end`,
+            windowStartedAt: sql<Date>`case
+              when ${requestRateLimitBuckets.windowStartedAt} > ${windowResetBefore}
+                then ${requestRateLimitBuckets.windowStartedAt}
+              else ${input.now}
+            end`,
             updatedAt: input.now,
-          })
-          .where(
-            and(
-              eq(requestRateLimitBuckets.scopeKey, input.scope.key),
-              eq(requestRateLimitBuckets.action, input.action),
-              eq(requestRateLimitBuckets.windowSeconds, policy.windowSeconds),
-            ),
-          );
-      }
+          },
+        })
+        .returning({
+          requestCount: requestRateLimitBuckets.requestCount,
+          windowStartedAt: requestRateLimitBuckets.windowStartedAt,
+        });
+
+      const withinWindow = bucket.windowStartedAt.getTime() > windowResetBefore.getTime();
+      const windowStartedAt = withinWindow ? bucket.windowStartedAt : input.now;
+      const requestCount = bucket.requestCount;
 
       const allowance = calculateAllowance({
         now: input.now,
@@ -350,4 +399,6 @@ export async function consumeSubmitAttemptRateLimit(request: Request, sessionTok
 
 export function resetRequestRateLimitStoreForTests() {
   getRateLimitStore().clear();
+  globalThis.__pixelPromptRequestRateLimitNextMemoryPruneAtMs__ = undefined;
+  globalThis.__pixelPromptRequestRateLimitNextDatabaseCleanupAtMs__ = undefined;
 }

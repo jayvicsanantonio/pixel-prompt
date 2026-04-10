@@ -19,6 +19,10 @@ Default limits:
 - burst: `8` submit attempts per `60` seconds
 - sustained: `30` submit attempts per `600` seconds
 
+Config guardrail:
+
+- burst and sustained windows must remain distinct so each policy keeps its own bucket
+
 These defaults are intentionally generous enough for rapid internal playtesting while still blocking scripted churn on the costly provider path.
 
 ## Restart / Replay Mutation Review

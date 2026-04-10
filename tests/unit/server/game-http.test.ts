@@ -838,6 +838,51 @@ describe("game http handlers", () => {
     });
   });
 
+  it("keys anonymous fingerprints off the client IP even when x-forwarded-for contains proxy hops", async () => {
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "1";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
+    process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_WINDOW_SECONDS = "600";
+
+    const firstResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "pixel-prompt-proxy-test",
+          "x-forwarded-for": "203.0.113.10, 10.0.0.2",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(firstResponse.status).toBe(200);
+
+    const throttledResponse = await postSubmitAttempt(
+      new Request("http://localhost/api/game/submit-attempt", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": "pixel-prompt-proxy-test",
+          "x-forwarded-for": "203.0.113.10, 10.0.0.3",
+        },
+        body: JSON.stringify({
+          levelId: "level-1",
+          promptText: "vague",
+        }),
+      }),
+    );
+
+    expect(throttledResponse.status).toBe(429);
+    await expect(throttledResponse.json()).resolves.toMatchObject({
+      ok: false,
+      code: "submit_rate_limited",
+    });
+  });
+
   it("preserves attempts when the mock provider reports a technical failure", async () => {
     const sessionToken = await createSessionToken();
 
