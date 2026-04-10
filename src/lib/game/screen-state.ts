@@ -2,10 +2,11 @@ import { levels, tipRules, uiCopy } from "@/content";
 import type {
   ActiveLevelContinuationPreview,
   ActiveLevelFailurePreview,
+  ActiveLevelProgressOverview,
   ActiveLevelResultPreview,
   ActiveLevelSummaryPreview,
 } from "./active-level";
-import type { AttemptScore, GameProgress, Level, LevelAttempt } from "./types";
+import type { AttemptScore, GameProgress, Level, LevelAttempt, LevelStatus } from "./types";
 
 const tipRuleBodies = new Map(tipRules.map((tipRule) => [tipRule.id, tipRule.body]));
 
@@ -39,6 +40,47 @@ export function buildEmptyAttemptScore(level: Level): AttemptScore {
       provider: "bootstrap",
       model: "unavailable",
     },
+  };
+}
+
+function getDefaultLevelStatus(level: Level, currentLevel: Level): LevelStatus {
+  if (level.id === currentLevel.id) {
+    return "in_progress";
+  }
+
+  if (level.number < currentLevel.number) {
+    return "unlocked";
+  }
+
+  return "locked";
+}
+
+/** Builds the player-facing run progression rail from persisted level progress. */
+export function buildProgressOverview(input: {
+  progress: GameProgress | null;
+  currentLevel: Level;
+}): ActiveLevelProgressOverview {
+  return {
+    highestUnlockedLevelNumber: input.progress?.highestUnlockedLevelNumber ?? input.currentLevel.number,
+    levels: levels.map((level) => {
+      const levelProgress = input.progress ? findLevelProgress(input.progress, level.id) : null;
+      const status = levelProgress?.status ?? getDefaultLevelStatus(level, input.currentLevel);
+
+      return {
+        levelId: level.id,
+        levelNumber: level.number,
+        levelTitle: level.title,
+        threshold: level.threshold,
+        status,
+        isCurrent: level.id === input.currentLevel.id,
+        bestScore: levelProgress?.bestScore ?? null,
+        attemptsRemaining:
+          status === "locked"
+            ? null
+            : levelProgress?.attemptsRemaining ?? (level.id === input.currentLevel.id ? level.maxAttempts : null),
+        href: `/play?level=${level.number}`,
+      };
+    }),
   };
 }
 

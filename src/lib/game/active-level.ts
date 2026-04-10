@@ -1,4 +1,4 @@
-import type { AttemptScore, Level } from "./types";
+import type { AttemptScore, Level, LevelStatus } from "./types";
 
 export type ActiveLevelInitialScreenMode = "active" | "failure";
 
@@ -30,6 +30,23 @@ export interface ActiveLevelSummaryLevelPreview {
   replayHref: string;
 }
 
+export interface ActiveLevelProgressLevelPreview {
+  levelId: Level["id"];
+  levelNumber: number;
+  levelTitle: string;
+  threshold: number;
+  status: LevelStatus;
+  isCurrent: boolean;
+  bestScore: number | null;
+  attemptsRemaining: number | null;
+  href: string;
+}
+
+export interface ActiveLevelProgressOverview {
+  highestUnlockedLevelNumber: number;
+  levels: ActiveLevelProgressLevelPreview[];
+}
+
 export interface ActiveLevelSummaryPreview {
   levelsCompleted: number;
   totalAttemptsUsed: number;
@@ -48,6 +65,7 @@ export interface ActiveLevelScreenState {
     anonymousPlayerId?: string;
     runId?: string;
   };
+  progressOverview: ActiveLevelProgressOverview;
   resultPreview: ActiveLevelResultPreview;
   continuation: ActiveLevelContinuationPreview;
   failurePreview: ActiveLevelFailurePreview;

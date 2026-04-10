@@ -1,5 +1,6 @@
 import { levels, uiCopy } from "@/content";
-import type { ActiveLevelScreenState } from "@/lib/game";
+import type { ActiveLevelScreenState, GameProgress } from "@/lib/game";
+import { buildProgressOverview } from "@/lib/game/screen-state";
 
 interface MockActiveLevelStateOptions {
   levelNumber?: number;
@@ -97,6 +98,8 @@ const mockSummaryMetricsByLevelNumber = {
   },
 } as const;
 
+const MOCK_STATE_TIMESTAMP = "2026-04-07T08:00:00.000Z";
+
 function getMockSummaryPreview() {
   const bestScores = levels.map((currentLevel, index) => {
     const metrics = mockSummaryMetricsByLevelNumber[
@@ -137,6 +140,55 @@ function getMockSummaryPreview() {
   };
 }
 
+function buildMockProgress(input: {
+  currentLevelNumber: number;
+  attemptsRemaining: number;
+  attemptsUsed: number;
+  canResume: boolean;
+}): GameProgress {
+  const activeLevel = levels.find((candidate) => candidate.number === input.currentLevelNumber) ?? levels[0];
+
+  if (!activeLevel) {
+    throw new Error("No levels available to build mock progress.");
+  }
+
+  return {
+    playerId: "player-mock",
+    runId: "run-mock",
+    currentLevelId: activeLevel.id,
+    highestUnlockedLevelNumber: activeLevel.number,
+    totalAttemptsUsed: input.attemptsUsed,
+    canResume: input.canResume,
+    lastActiveAt: MOCK_STATE_TIMESTAMP,
+    levels: levels.map((currentLevel) => {
+      const isPastLevel = currentLevel.number < activeLevel.number;
+      const isCurrentLevel = currentLevel.id === activeLevel.id;
+      const isFailedLevel = input.canResume && isCurrentLevel && input.attemptsUsed >= currentLevel.maxAttempts;
+
+      return {
+        levelId: currentLevel.id,
+        status: isPastLevel ? "passed" : isFailedLevel ? "failed" : isCurrentLevel ? "in_progress" : "locked",
+        currentAttemptCycle: 1,
+        attemptsUsed: isCurrentLevel ? input.attemptsUsed : isPastLevel ? 1 : 0,
+        attemptsRemaining: isCurrentLevel ? input.attemptsRemaining : isPastLevel ? currentLevel.maxAttempts - 1 : currentLevel.maxAttempts,
+        bestScore:
+          currentLevel.number === 1 && isPastLevel
+            ? 68
+            : currentLevel.number === 2 && input.canResume && activeLevel.number >= 2
+              ? 59
+              : isPastLevel
+                ? currentLevel.threshold + 8
+                : null,
+        strongestAttemptId: null,
+        unlockedAt: isPastLevel || isCurrentLevel ? MOCK_STATE_TIMESTAMP : null,
+        completedAt: isPastLevel ? MOCK_STATE_TIMESTAMP : null,
+        lastCompletedAt: isPastLevel ? MOCK_STATE_TIMESTAMP : null,
+        lastAttemptedAt: isPastLevel || isCurrentLevel ? MOCK_STATE_TIMESTAMP : null,
+      };
+    }),
+  };
+}
+
 export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): ActiveLevelScreenState {
   const level = levels.find((candidate) => candidate.number === options?.levelNumber) ?? levels[0];
 
@@ -168,6 +220,15 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
         anonymousPlayerId: "player-mock",
         runId: "run-mock",
       },
+      progressOverview: buildProgressOverview({
+        progress: buildMockProgress({
+          currentLevelNumber: level.number,
+          attemptsRemaining,
+          attemptsUsed,
+          canResume: true,
+        }),
+        currentLevel: level,
+      }),
       resultPreview,
       continuation,
       failurePreview,
@@ -184,6 +245,15 @@ export function getMockActiveLevelState(options?: MockActiveLevelStateOptions): 
       anonymousPlayerId: "player-mock",
       runId: "run-mock",
     },
+    progressOverview: buildProgressOverview({
+      progress: buildMockProgress({
+        currentLevelNumber: level.number,
+        attemptsRemaining,
+        attemptsUsed,
+        canResume: false,
+      }),
+      currentLevel: level,
+    }),
     resultPreview,
     continuation,
     failurePreview,

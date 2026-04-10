@@ -485,14 +485,14 @@ Primary owners:
 Tasks:
 
 - [x] implement final completion summary with levels completed, attempts used, best scores, and improvement trend
-- implement multi-level progression with unlocks and replay of completed levels
-- ensure failed levels offer a restart path without soft-locking progression
-- surface replay entry points without regressing unlocked progression
+- [x] implement multi-level progression with unlocks and replay of completed levels (the `/play` route now renders a persistent progression rail with locked/current/cleared states and replay actions for cleared levels)
+- [x] ensure failed levels offer a restart path without soft-locking progression (failed current levels now surface `Restart Level` both in the failure state and directly from the persistent progression rail)
+- [x] surface replay entry points without regressing unlocked progression (replay is now surfaced from the summary and the persistent progression rail while preserving the unlocked frontier)
 - [x] validate resume behavior across refresh, return sessions, and orphaned progress that references removed levels
 - [x] ensure analytics cover the full gameplay funnel and the PRD-defined success metrics
-- tune thresholds and tip rules across the initial curated level set
+- [x] tune thresholds and tip rules across the initial curated level set (thresholds remain `50/60/70` based on current deterministic margins; Level 1 and Level 3 now surface more level-specific composition advice under the current scorer, documented in `docs/foundation/threshold-and-tip-tuning.md`)
 - [x] add failure handling for generation, scoring, asset-display, network, and provider rate-limit issues
-- run structured QA across the full level set, including nonsensical-but-valid prompts and scoring inconsistency reviews
+- [x] run structured QA across the full level set, including nonsensical-but-valid prompts and scoring inconsistency reviews (documented in `docs/foundation/phase-3-qa-run-2026-04-08.md`; automated seeded-level QA now covers nonsensical prompts across Levels 1-3 and links back to the current scoring-consistency review)
 
 Exit criteria:
 
@@ -669,3 +669,4 @@ The first concrete tasks for the repo should be:
 - app scaffold: completed
 - provider integrations: completed for backend attempt processing and frontend live submission wiring
 - gameplay implementation: in progress, with Phase 1 Agent 5 copy deliverables completed and Phase 2 restart/replay wiring now in place
+- gameplay implementation: in progress, with the live `/play` progression rail now surfacing locked/current/cleared states and replay entry points for cleared levels

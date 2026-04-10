@@ -81,6 +81,18 @@ export const tipRules = defineTipRules([
     },
   },
   {
+    id: "tip-composition-still-life-crop",
+    dimension: "composition",
+    title: "Tighten the tabletop crop",
+    body: "Name the tight tabletop crop and the spacing between the pears, bottle, and plate so the still life does not drift.",
+    priority: 73,
+    when: {
+      maxDimensionScore: 74,
+      minAttemptNumber: 1,
+      levelCategories: ["still-life"],
+    },
+  },
+  {
     id: "tip-textures-specificity",
     dimension: "textures",
     title: "Add texture words",
@@ -130,6 +142,18 @@ export const tipRules = defineTipRules([
     title: "Spell out the historical era",
     body: "This scene needs stronger period language. Name the historical era or architectural tradition so the courtyard does not read as generic.",
     priority: 74,
+    when: {
+      maxDimensionScore: 74,
+      minAttemptNumber: 1,
+      levelThemes: ["historical"],
+    },
+  },
+  {
+    id: "tip-composition-historical-arches",
+    dimension: "composition",
+    title: "Call out the arch rhythm",
+    body: "Mention the layered arches, courtyard depth, and repeating stone shapes so the scene holds its architectural structure.",
+    priority: 73,
     when: {
       maxDimensionScore: 74,
       minAttemptNumber: 1,

@@ -25,8 +25,22 @@ describe("seeded tip rules", () => {
           }),
         }),
         expect.objectContaining({
+          id: "tip-composition-still-life-crop",
+          dimension: "composition",
+          when: expect.objectContaining({
+            levelCategories: ["still-life"],
+          }),
+        }),
+        expect.objectContaining({
           id: "tip-time-period-historical",
           dimension: "time_period",
+          when: expect.objectContaining({
+            levelThemes: ["historical"],
+          }),
+        }),
+        expect.objectContaining({
+          id: "tip-composition-historical-arches",
+          dimension: "composition",
           when: expect.objectContaining({
             levelThemes: ["historical"],
           }),

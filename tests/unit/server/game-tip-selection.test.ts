@@ -66,7 +66,7 @@ describe("selectRetryTipIds", () => {
       },
     });
 
-    expect(tipIds).toEqual(["tip-composition-specificity", "tip-context-specificity"]);
+    expect(tipIds).toEqual(["tip-composition-still-life-crop", "tip-context-specificity"]);
   });
 
   it("prefers unseen advice before repeating the same tip ids", () => {
@@ -75,7 +75,7 @@ describe("selectRetryTipIds", () => {
     const tipIds = selectRetryTipIds({
       attemptNumber: 2,
       level: levelOne!,
-      previousAttempts: [createAttemptWithTips(["tip-composition-specificity", "tip-context-specificity"])],
+      previousAttempts: [createAttemptWithTips(["tip-composition-still-life-crop", "tip-context-specificity"])],
       score: {
         raw: 0.36,
         normalized: 36,
@@ -140,6 +140,7 @@ describe("selectRetryTipIds", () => {
 
     expect(urbanTips).toContain("tip-context-urban-night");
     expect(historicalTips).toContain("tip-time-period-historical");
+    expect(historicalTips).toContain("tip-composition-historical-arches");
   });
 
   it("returns no tips for passed scores or missing breakdowns", () => {

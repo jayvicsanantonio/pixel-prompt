@@ -546,7 +546,7 @@ describe("game http handlers", () => {
       attempt: {
         consumedAttempt: true,
         result: {
-          tipIds: ["tip-composition-specificity", "tip-context-specificity"],
+          tipIds: ["tip-composition-still-life-crop", "tip-context-specificity"],
         },
       },
     });
@@ -592,6 +592,88 @@ describe("game http handlers", () => {
       },
     });
   });
+
+  it.each([
+    {
+      levelId: "level-1",
+      promptText: "banana theorem whispers beside cardboard lanterns",
+      expectedTipId: "tip-composition-still-life-crop",
+    },
+    {
+      levelId: "level-2",
+      promptText: "marble thunder sings under paper bicycles",
+      expectedTipId: "tip-context-urban-night",
+    },
+    {
+      levelId: "level-3",
+      promptText: "upside-down soup library orbiting velvet ladders",
+      expectedTipId: "tip-composition-historical-arches",
+    },
+  ])(
+    "treats nonsensical but valid prompts as scored failed attempts for $levelId",
+    async ({ levelId, promptText, expectedTipId }) => {
+      const sessionToken = await createSessionToken();
+      const unlockAttemptsByLevelId: Record<string, Array<{ levelId: string; promptText: string }>> = {
+        "level-1": [],
+        "level-2": [
+          {
+            levelId: "level-1",
+            promptText: "sunlit still life of pears and a bottle on a wooden table",
+          },
+        ],
+        "level-3": [
+          {
+            levelId: "level-1",
+            promptText: "sunlit still life of pears and a bottle on a wooden table",
+          },
+          {
+            levelId: "level-2",
+            promptText: "cinematic neon portrait in a wet alley at midnight with urban signs",
+          },
+        ],
+      };
+
+      for (const unlockAttempt of unlockAttemptsByLevelId[levelId]) {
+        const unlockResponse = await submitAttempt(sessionToken, unlockAttempt.levelId, unlockAttempt.promptText);
+        const unlockBody = await unlockResponse.json();
+
+        expect(unlockResponse.status).toBe(200);
+        expect(unlockBody).toMatchObject({
+          ok: true,
+          transition: "passed",
+        });
+      }
+
+      const submitResponse = await postSubmitAttempt(
+        new Request("http://localhost/api/game/submit-attempt", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+          },
+          body: JSON.stringify({
+            levelId,
+            promptText,
+          }),
+        }),
+      );
+      const submitBody = await submitResponse.json();
+
+      expect(submitResponse.status).toBe(200);
+      expect(submitBody.ok).toBe(true);
+      expect(submitBody.transition).toBe("retry");
+      expect(submitBody.attempt.consumedAttempt).toBe(true);
+      expect(submitBody.attempt.result).toMatchObject({
+        status: "scored",
+        outcome: "failed",
+        tipIds: expect.arrayContaining([expectedTipId]),
+        score: {
+          passed: false,
+        },
+      });
+      expect(submitBody.attempt.result.score.normalized).toBeLessThan(submitBody.attempt.result.score.threshold);
+    },
+  );
 
   it("accepts prompts at the Unicode character limit", async () => {
     const sessionToken = await createSessionToken();

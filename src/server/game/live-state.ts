@@ -3,6 +3,7 @@ import type { ActiveLevelScreenState, Level } from "@/lib/game";
 import {
   buildContinuationPreview,
   buildFailurePreview,
+  buildProgressOverview,
   buildResultPreview,
   buildSummaryPreview,
   findLevelProgress,
@@ -45,6 +46,15 @@ function getSelectedLevel(input: {
   return requestedLevel;
 }
 
+/** Returns the actual unlocked/current level used to derive the progression rail. */
+function getProgressCurrentLevel(selectedLevel: Level, session: GameSessionSnapshot | null) {
+  if (session) {
+    return selectedLevel;
+  }
+
+  return levels[0] ?? selectedLevel;
+}
+
 /** Returns the latest attempt within the currently active attempt cycle for the level. */
 function getLatestAttempt(session: GameSessionSnapshot | null, level: Level, currentAttemptCycle?: number) {
   if (!session) {
@@ -78,6 +88,7 @@ export function buildLiveActiveLevelState(input: {
     preferResume: input.preferResume ?? false,
     session: input.session,
   });
+  const progressCurrentLevel = getProgressCurrentLevel(selectedLevel, input.session);
   const levelProgress = input.session ? findLevelProgress(input.session.progress, selectedLevel.id) : null;
   const latestAttempt = getLatestAttempt(input.session, selectedLevel, levelProgress?.currentAttemptCycle);
   const strongestAttempt = getStrongestAttempt(input.session, levelProgress?.strongestAttemptId);
@@ -97,6 +108,10 @@ export function buildLiveActiveLevelState(input: {
           runId: input.session.progress.runId,
         }
       : undefined,
+    progressOverview: buildProgressOverview({
+      progress: input.session?.progress ?? null,
+      currentLevel: progressCurrentLevel,
+    }),
     resultPreview: buildResultPreview(selectedLevel, resultAttempt),
     continuation: buildContinuationPreview(selectedLevel, attemptsRemaining),
     failurePreview: buildFailurePreview({
