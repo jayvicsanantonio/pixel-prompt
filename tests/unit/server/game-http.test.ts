@@ -936,7 +936,7 @@ describe("game http handlers", () => {
     });
   });
 
-  it("falls back to the right-most x-forwarded-for hop when trusted single-hop headers are absent", async () => {
+  it("falls back to the first x-forwarded-for hop when trusted single-hop headers are absent", async () => {
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_MAX = "1";
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_BURST_WINDOW_SECONDS = "60";
     process.env.PIXEL_PROMPT_SUBMIT_RATE_LIMIT_SUSTAINED_MAX = "100";
@@ -963,7 +963,7 @@ describe("game http handlers", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-forwarded-for": "198.51.100.20, 10.0.0.2",
+          "x-forwarded-for": "203.0.113.10, 10.0.0.3",
         },
         body: JSON.stringify({
           levelId: "level-1",

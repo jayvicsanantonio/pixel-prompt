@@ -68,7 +68,7 @@ function getFirstHeaderValue(headers: Headers, headerNames: string[]) {
   return null;
 }
 
-function getLastForwardedForHop(headers: Headers) {
+function getFirstForwardedForHop(headers: Headers) {
   const forwardedForHeader = getFirstHeaderValue(headers, ["x-forwarded-for"]);
 
   if (!forwardedForHeader) {
@@ -80,7 +80,7 @@ function getLastForwardedForHop(headers: Headers) {
     .map((hop) => hop.trim())
     .filter(Boolean);
 
-  return forwardedForHops[forwardedForHops.length - 1] ?? null;
+  return forwardedForHops[0] ?? null;
 }
 
 function hashKeyPart(value: string) {
@@ -143,7 +143,7 @@ function getSubmitAttemptPolicies() {
 function getAnonymousRequestFingerprint(request: Request) {
   const clientIp =
     getFirstHeaderValue(request.headers, ["x-real-ip", "cf-connecting-ip"])?.trim() ??
-    getLastForwardedForHop(request.headers) ??
+    getFirstForwardedForHop(request.headers) ??
     "unknown-client-ip";
 
   return hashKeyPart(clientIp);
