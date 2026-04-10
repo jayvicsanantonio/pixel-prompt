@@ -1,3 +1,5 @@
+import type { SubmissionIssueKind } from "@/lib/game";
+
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return count === 1 ? singular : plural;
 }
@@ -214,7 +216,7 @@ export const uiCopy = {
       submittedPrompt: "Submitted Prompt",
       recovery: "Recovery",
       backToPromptCta: "Back to Prompt",
-      buildEyebrow(kind: string) {
+      buildEyebrow(kind: SubmissionIssueKind) {
         switch (kind) {
           case "content_policy_rejection":
             return "Prompt Blocked";
@@ -224,7 +226,7 @@ export const uiCopy = {
             return "Try Again";
         }
       },
-      buildTitle(kind: string) {
+      buildTitle(kind: SubmissionIssueKind) {
         switch (kind) {
           case "content_policy_rejection":
             return "That prompt can't be used";
@@ -250,7 +252,7 @@ export const uiCopy = {
             return "The attempt hit a technical issue";
         }
       },
-      buildBody(kind: string, attemptPreserved: boolean) {
+      buildBody(kind: SubmissionIssueKind, attemptPreserved: boolean) {
         const preservedSuffix = attemptPreserved ? " This did not use an attempt." : "";
 
         switch (kind) {
@@ -265,14 +267,14 @@ export const uiCopy = {
             return "Open the summary or replay a cleared level from the landing page.";
           case "level_changed":
           case "level_mismatch":
-            return "Go back to the prompt and continue from the current live level.";
+            return "Return to the landing page and continue from the current live level.";
           case "submit_failed":
             return "Check the connection, then return to the prompt or resume the run to confirm the latest state.";
           default:
             return `Go back to the prompt and try again.${preservedSuffix}`;
         }
       },
-      buildRecovery(kind: string, attemptPreserved: boolean) {
+      buildRecovery(kind: SubmissionIssueKind, attemptPreserved: boolean) {
         switch (kind) {
           case "restart_required":
             return "Restart needed";

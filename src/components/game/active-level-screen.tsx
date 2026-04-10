@@ -11,6 +11,8 @@ import {
   type LandingExperienceState,
   type Level,
   type LevelAttempt,
+  type SubmissionIssueKind,
+  type SubmitAttemptTransition,
 } from "@/lib/game";
 import {
   buildFailurePreview,
@@ -30,7 +32,7 @@ interface ActiveLevelScreenProps {
 
 interface SubmitAttemptSuccessResponse {
   ok: true;
-  transition: "retry" | "passed" | "failed" | "rejected" | "error" | "completed";
+  transition: SubmitAttemptTransition;
   attempt: LevelAttempt;
   currentLevel: Level | null;
   landing: LandingExperienceState;
@@ -56,20 +58,6 @@ interface ProgressMutationErrorResponse {
   message: string;
 }
 
-type SubmissionIssueKind =
-  | "asset_unavailable"
-  | "content_policy_rejection"
-  | "interrupted"
-  | "level_changed"
-  | "level_mismatch"
-  | "rate_limited"
-  | "restart_required"
-  | "run_complete"
-  | "submit_failed"
-  | "submit_rate_limited"
-  | "technical_failure"
-  | "timeout";
-
 type ScreenFeedback =
   | {
       kind: "prompt";
@@ -85,6 +73,20 @@ interface SubmissionIssue {
   message: string;
   attemptPreserved: boolean;
 }
+
+const ATTEMPT_PRESERVED_ERROR_CODES = [
+  "run_complete",
+  "level_changed",
+  "level_mismatch",
+  "restart_required",
+  "submit_rate_limited",
+] as const satisfies readonly SubmissionIssueKind[];
+
+const LANDING_REDIRECT_ISSUE_KINDS = [
+  "level_changed",
+  "level_mismatch",
+  "run_complete",
+] as const satisfies readonly SubmissionIssueKind[];
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -113,30 +115,31 @@ function buildSubmissionIssueFromAttempt(attempt: LevelAttempt): SubmissionIssue
   };
 }
 
+function isAttemptPreservedErrorCode(
+  code: string,
+): code is (typeof ATTEMPT_PRESERVED_ERROR_CODES)[number] {
+  return ATTEMPT_PRESERVED_ERROR_CODES.some((candidate) => candidate === code);
+}
+
 function buildSubmissionIssueFromError(code: string, message: string): SubmissionIssue {
-  switch (code) {
-    case "run_complete":
-    case "level_changed":
-    case "level_mismatch":
-    case "restart_required":
-    case "submit_rate_limited":
-      return {
-        kind: code,
-        message,
-        attemptPreserved: true,
-      };
-    default:
-      return {
-        kind: "submit_failed",
-        message,
-        attemptPreserved: false,
-      };
+  if (isAttemptPreservedErrorCode(code)) {
+    return {
+      kind: code,
+      message,
+      attemptPreserved: true,
+    };
   }
+
+  return {
+    kind: "submit_failed",
+    message,
+    attemptPreserved: false,
+  };
 }
 
 function buildLiveScreenState(input: {
   previousState: ActiveLevelScreenState;
-  transition: SubmitAttemptSuccessResponse["transition"];
+  transition: SubmitAttemptTransition;
   attempt: LevelAttempt;
   progress: GameProgress;
   currentLevel: Level | null;
@@ -557,7 +560,7 @@ export function ActiveLevelScreen({
         return;
       }
 
-      if (!body.attempt.result.score) {
+      if (body.attempt.result.score == null) {
         setState((previousState) =>
           ({
             ...buildLiveScreenState({
@@ -993,6 +996,7 @@ export function ActiveLevelScreen({
 
     if (screenMode === "issue" && submissionIssue) {
       const issueNeedsRestart = submissionIssue.kind === "restart_required";
+      const issueRoutesToLanding = LANDING_REDIRECT_ISSUE_KINDS.some((kind) => kind === submissionIssue.kind);
 
       return (
         <>
@@ -1044,14 +1048,20 @@ export function ActiveLevelScreen({
                   {uiCopy.gameplay.failure.restartCta}
                 </a>
               )
+            ) : issueRoutesToLanding ? (
+              <Link className={styles.button} href="/">
+                {uiCopy.gameplay.backToLanding}
+              </Link>
             ) : (
               <button className={styles.button} type="button" onClick={returnToPrompt}>
                 {uiCopy.gameplay.issue.backToPromptCta}
               </button>
             )}
-            <Link className={styles.secondaryButton} href="/">
-              {uiCopy.gameplay.backToLanding}
-            </Link>
+            {issueRoutesToLanding ? null : (
+              <Link className={styles.secondaryButton} href="/">
+                {uiCopy.gameplay.backToLanding}
+              </Link>
+            )}
           </div>
         </>
       );

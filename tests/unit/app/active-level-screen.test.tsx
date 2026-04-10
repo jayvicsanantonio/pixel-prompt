@@ -350,6 +350,67 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Needs Retry")).toBeInTheDocument();
   });
 
+  it("treats a zero score as a scored result instead of an issue", async () => {
+    const promptValue = "flat monochrome silhouette";
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
+          transition: "retry",
+          attempt: createLevelAttemptFixture({
+            id: "attempt-live-zero",
+            levelId: "level-1",
+            promptText: promptValue,
+            score: {
+              raw: 0,
+              normalized: 0,
+              threshold: 50,
+              passed: false,
+              breakdown: {
+                subject: 0,
+              },
+            },
+            result: {
+              strongestAttemptScore: 0,
+              tipIds: ["tip-subject-specificity"],
+            },
+          }),
+          currentLevel: levels[0],
+          landing: createLandingStateFixture({
+            currentLevelId: "level-1",
+            levelsCleared: 0,
+            attemptsRemaining: 2,
+            bestScore: 0,
+          }),
+          progress: createGameProgressFixture({
+            currentLevelId: "level-1",
+            totalAttemptsUsed: 1,
+            levels: [
+              {
+                levelId: "level-1",
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 0,
+                strongestAttemptId: "attempt-live-zero",
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: promptValue },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("Compare the target against your generated match")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("0%");
+    expect(screen.queryByText("The attempt could not be completed. Try again.")).not.toBeInTheDocument();
+  });
+
   it("surfaces strongest-attempt context from the live failure response", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       createJsonResponse(
@@ -580,6 +641,32 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Restart needed")).toBeInTheDocument();
     expect(screen.getByText(promptValue)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart Level" })).toBeInTheDocument();
+  });
+
+  it("routes stale-level submit errors back to landing instead of the stale prompt", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse(
+        {
+          ok: false,
+          code: "level_changed",
+          message: "This run advanced to a different live level. Return to the landing page to resume.",
+        },
+        409,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "sunlit pears and a bottle on a wooden table" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("The live level changed")).toBeInTheDocument();
+    expect(screen.getByText("Return to the landing page and continue from the current live level.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to Prompt" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Back to Landing" })).toHaveLength(2);
   });
 
   it("shows a recoverable issue state for unscored provider failures and returns to the prompt", async () => {

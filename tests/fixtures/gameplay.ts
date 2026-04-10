@@ -6,13 +6,13 @@ import type {
   Level,
   LevelAttempt,
   LevelProgress,
+  SubmitAttemptTransition,
 } from "@/lib/game";
 
 export const FIXTURE_PLAYER_ID = "player-1";
 export const FIXTURE_RUN_ID = "run-1";
 export const FIXTURE_TIMESTAMP = "2026-04-07T08:00:00.000Z";
 
-type SubmitTransition = "retry" | "passed" | "failed" | "rejected" | "error" | "completed";
 type LevelProgressOverride = Partial<LevelProgress> & Pick<LevelProgress, "levelId">;
 
 function getLevel(levelId: string) {
@@ -25,12 +25,12 @@ function getLevel(levelId: string) {
   return level;
 }
 
-function buildDefaultLevelStatus(level: Level, currentLevelId: string, highestUnlockedLevelNumber: number) {
-  if (level.id === currentLevelId) {
+function buildDefaultLevelStatus(level: Level, currentLevelId: string | null, highestUnlockedLevelNumber: number) {
+  if (currentLevelId != null && level.id === currentLevelId) {
     return "in_progress" as const;
   }
 
-  if (level.number < getLevel(currentLevelId).number) {
+  if (currentLevelId != null && level.number < getLevel(currentLevelId).number) {
     return "passed" as const;
   }
 
@@ -44,16 +44,16 @@ function buildDefaultLevelStatus(level: Level, currentLevelId: string, highestUn
 export function createGameProgressFixture(input?: {
   playerId?: string;
   runId?: string;
-  currentLevelId?: string;
+  currentLevelId?: string | null;
   highestUnlockedLevelNumber?: number;
   totalAttemptsUsed?: number;
   canResume?: boolean;
   lastActiveAt?: string;
   levels?: LevelProgressOverride[];
 }): GameProgress {
-  const currentLevelId = input?.currentLevelId ?? "level-1";
-  const currentLevel = getLevel(currentLevelId);
-  const highestUnlockedLevelNumber = input?.highestUnlockedLevelNumber ?? currentLevel.number;
+  const currentLevelId = input?.currentLevelId === undefined ? "level-1" : input.currentLevelId;
+  const currentLevel = currentLevelId == null ? null : getLevel(currentLevelId);
+  const highestUnlockedLevelNumber = input?.highestUnlockedLevelNumber ?? currentLevel?.number ?? 1;
   const overrides = new Map((input?.levels ?? []).map((levelProgress) => [levelProgress.levelId, levelProgress]));
 
   return {
@@ -221,23 +221,30 @@ export function createLevelAttemptFixture(input?: {
 }
 
 export function createSubmitAttemptResponseFixture(input?: {
-  transition?: SubmitTransition;
+  transition?: SubmitAttemptTransition;
   attempt?: LevelAttempt;
   currentLevel?: Level | null;
   landing?: LandingExperienceState;
   progress?: GameProgress;
 }) {
   const attempt = input?.attempt ?? createLevelAttemptFixture();
-  const currentLevel = input?.currentLevel ?? getLevel(attempt.levelId);
+  const currentLevel = input?.currentLevel === undefined ? getLevel(attempt.levelId) : input.currentLevel;
+  const transition =
+    input?.transition ?? (attempt.result.score?.passed ? "passed" : attempt.result.outcome === "failed" ? "retry" : "error");
   const progress =
     input?.progress ??
     createGameProgressFixture({
-      currentLevelId: currentLevel?.id ?? attempt.levelId,
+      currentLevelId: currentLevel?.id ?? null,
       totalAttemptsUsed: attempt.consumedAttempt ? attempt.attemptNumber : 0,
       levels: [
         {
           levelId: attempt.levelId,
-          status: attempt.result.outcome === "passed" && currentLevel?.id !== attempt.levelId ? "passed" : "in_progress",
+          status:
+            transition === "passed" && currentLevel?.id !== attempt.levelId
+              ? "passed"
+              : transition === "failed"
+                ? "failed"
+                : "in_progress",
           attemptsUsed: attempt.consumedAttempt ? attempt.attemptNumber : 0,
           attemptsRemaining:
             getLevel(attempt.levelId).maxAttempts - (attempt.consumedAttempt ? attempt.attemptNumber : 0),
@@ -269,7 +276,7 @@ export function createSubmitAttemptResponseFixture(input?: {
 
   return {
     ok: true as const,
-    transition: input?.transition ?? (attempt.result.score?.passed ? "passed" : attempt.result.outcome === "failed" ? "retry" : "error"),
+    transition,
     attempt,
     currentLevel,
     landing,
@@ -282,11 +289,11 @@ export function createProgressMutationResponseFixture(input?: {
   landing?: LandingExperienceState;
   progress?: GameProgress;
 }) {
-  const currentLevel = input?.currentLevel ?? levels[0] ?? null;
+  const currentLevel = input?.currentLevel === undefined ? (levels[0] ?? null) : input.currentLevel;
   const progress =
     input?.progress ??
     createGameProgressFixture({
-      currentLevelId: currentLevel?.id,
+      currentLevelId: currentLevel?.id ?? null,
     });
 
   return {
