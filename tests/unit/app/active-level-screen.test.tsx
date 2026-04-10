@@ -12,6 +12,14 @@ vi.mock("@/lib/analytics/client", () => ({
 import { ActiveLevelScreen } from "@/components/game/active-level-screen";
 import { levels } from "@/content";
 import { getMockActiveLevelState } from "@/server/game/mock-active-level-state";
+import {
+  createGameProgressFixture,
+  createJsonResponse,
+  createLandingStateFixture,
+  createLevelAttemptFixture,
+  createProgressMutationResponseFixture,
+  createSubmitAttemptResponseFixture,
+} from "../../fixtures/gameplay";
 
 describe("ActiveLevelScreen", () => {
   afterEach(() => {
@@ -197,117 +205,122 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByRole("button", { name: "Back to Prompt" })).toBeInTheDocument();
   });
 
-  it("submits through the real endpoint and auto-renders the returned score", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+  it("shows the generating state immediately while a live submission is pending", async () => {
+    const promptValue = "sunlit pears and a bottle on a wooden table";
+    let resolveResponse: ((response: Response) => void) | null = null;
+    const fetchMock = vi.fn().mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: promptValue },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(screen.getByText("Building your match image")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(promptValue);
+    expect(screen.getByRole("button", { name: "Working..." })).toBeDisabled();
+
+    expect(resolveResponse).not.toBeNull();
+    resolveResponse!(
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
           transition: "retry",
-          attempt: {
-            id: "attempt-live-1",
-            runId: "run-1",
+          attempt: createLevelAttemptFixture({
+            id: "attempt-pending-1",
             levelId: "level-1",
-            attemptCycle: 1,
-            attemptNumber: 1,
-            promptText: "sunlit pears and a bottle on a wooden table",
-            createdAt: "2026-04-07T08:00:00.000Z",
-            consumedAttempt: true,
-            generation: {
-              provider: "mock",
-              model: "mock-image",
-              assetKey: "generated/level-1/attempt-live-1.png",
-            },
-            result: {
-              status: "scored",
-              outcome: "failed",
-              strongestAttemptScore: 64,
-              tipIds: ["tip-composition-specificity"],
-              score: {
-                raw: 0.64,
-                normalized: 64,
-                threshold: 50,
-                passed: false,
-                breakdown: {
-                  composition: 52,
-                },
-                scorer: {
-                  provider: "mock",
-                  model: "mock-scorer",
-                },
+            promptText: promptValue,
+            score: {
+              raw: 0.64,
+              normalized: 64,
+              threshold: 50,
+              passed: false,
+              breakdown: {
+                composition: 52,
               },
             },
-          },
-          currentLevel: levels[0],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=1&resume=1",
-              currentLevelNumber: 1,
-              currentLevelTitle: "Sunlit Still Life",
-              levelsCleared: 0,
-              attemptsRemaining: 2,
-              bestScore: 64,
-              helperText: "Pick up the same run without replaying cleared progress.",
+            result: {
+              strongestAttemptScore: 64,
+              tipIds: ["tip-composition-specificity"],
             },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          }),
+          currentLevel: levels[0],
+          landing: createLandingStateFixture({
             currentLevelId: "level-1",
-            highestUnlockedLevelNumber: 1,
+            levelsCleared: 0,
+            attemptsRemaining: 2,
+            bestScore: 64,
+          }),
+          progress: createGameProgressFixture({
+            currentLevelId: "level-1",
             totalAttemptsUsed: 1,
-            canResume: true,
-            lastActiveAt: "2026-04-07T08:00:00.000Z",
             levels: [
               {
                 levelId: "level-1",
-                status: "in_progress",
-                currentAttemptCycle: 1,
+                attemptsUsed: 1,
+                attemptsRemaining: 2,
+                bestScore: 64,
+                strongestAttemptId: "attempt-pending-1",
+              },
+            ],
+          }),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText("Compare the target against your generated match")).toBeInTheDocument();
+  });
+
+  it("submits through the real endpoint and auto-renders the returned score", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
+          transition: "retry",
+          attempt: createLevelAttemptFixture({
+            id: "attempt-live-1",
+            levelId: "level-1",
+            promptText: "sunlit pears and a bottle on a wooden table",
+            score: {
+              raw: 0.64,
+              normalized: 64,
+              threshold: 50,
+              passed: false,
+              breakdown: {
+                composition: 52,
+              },
+            },
+            result: {
+              strongestAttemptScore: 64,
+              tipIds: ["tip-composition-specificity"],
+            },
+          }),
+          currentLevel: levels[0],
+          landing: createLandingStateFixture({
+            currentLevelId: "level-1",
+            levelsCleared: 0,
+            attemptsRemaining: 2,
+            bestScore: 64,
+          }),
+          progress: createGameProgressFixture({
+            currentLevelId: "level-1",
+            totalAttemptsUsed: 1,
+            levels: [
+              {
+                levelId: "level-1",
                 attemptsUsed: 1,
                 attemptsRemaining: 2,
                 bestScore: 64,
                 strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
-                levelId: "level-2",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
-              {
-                levelId: "level-3",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
               },
             ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -339,116 +352,55 @@ describe("ActiveLevelScreen", () => {
 
   it("surfaces strongest-attempt context from the live failure response", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
           transition: "failed",
-          attempt: {
+          attempt: createLevelAttemptFixture({
             id: "attempt-live-2",
-            runId: "run-1",
             levelId: "level-2",
-            attemptCycle: 1,
             attemptNumber: 3,
             promptText: "cinematic neon portrait in a wet alley at midnight",
             createdAt: "2026-04-07T08:05:00.000Z",
-            consumedAttempt: true,
-            generation: {
-              provider: "mock",
-              model: "mock-image",
-              assetKey: "generated/level-2/attempt-live-2.png",
-            },
-            result: {
-              status: "scored",
-              outcome: "failed",
-              strongestAttemptScore: 59,
-              tipIds: ["tip-context-urban-night"],
-              score: {
-                raw: 0.59,
-                normalized: 59,
-                threshold: 60,
-                passed: false,
-                breakdown: {
-                  context: 34,
-                  style: 45,
-                },
-                scorer: {
-                  provider: "mock",
-                  model: "mock-scorer",
-                },
+            score: {
+              raw: 0.59,
+              normalized: 59,
+              threshold: 60,
+              passed: false,
+              breakdown: {
+                context: 34,
+                style: 45,
               },
             },
-          },
-          currentLevel: levels[1],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=2&resume=1",
-              currentLevelNumber: 2,
-              currentLevelTitle: "Midnight Alley Portrait",
-              levelsCleared: 1,
-              attemptsRemaining: 0,
-              bestScore: 59,
-              helperText: "Pick up the same run without replaying cleared progress.",
+            result: {
+              strongestAttemptScore: 59,
+              tipIds: ["tip-context-urban-night"],
             },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          }),
+          currentLevel: levels[1],
+          landing: createLandingStateFixture({
+            currentLevelId: "level-2",
+            levelsCleared: 1,
+            attemptsRemaining: 0,
+            bestScore: 59,
+          }),
+          progress: createGameProgressFixture({
             currentLevelId: "level-2",
             highestUnlockedLevelNumber: 2,
             totalAttemptsUsed: 4,
-            canResume: true,
             lastActiveAt: "2026-04-07T08:05:00.000Z",
             levels: [
               {
-                levelId: "level-1",
-                status: "passed",
-                currentAttemptCycle: 1,
-                attemptsUsed: 1,
-                attemptsRemaining: 2,
-                bestScore: 68,
-                strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: "2026-04-07T08:00:00.000Z",
-                lastCompletedAt: "2026-04-07T08:00:00.000Z",
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
                 levelId: "level-2",
                 status: "failed",
-                currentAttemptCycle: 1,
                 attemptsUsed: 3,
                 attemptsRemaining: 0,
                 bestScore: 59,
                 strongestAttemptId: "attempt-live-2",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: null,
-                lastCompletedAt: null,
                 lastAttemptedAt: "2026-04-07T08:05:00.000Z",
               },
-              {
-                levelId: "level-3",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
             ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -478,118 +430,40 @@ describe("ActiveLevelScreen", () => {
 
   it("updates the progression rail when a cleared level unlocks the next level", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
           transition: "passed",
-          attempt: {
+          attempt: createLevelAttemptFixture({
             id: "attempt-live-1",
-            runId: "run-1",
             levelId: "level-1",
-            attemptCycle: 1,
-            attemptNumber: 1,
             promptText: "sunlit pears and green bottle on a wooden table",
-            createdAt: "2026-04-07T08:00:00.000Z",
-            consumedAttempt: true,
-            generation: {
-              provider: "mock",
-              model: "mock-image",
-              assetKey: "generated/level-1/attempt-live-1.png",
-            },
-            result: {
-              status: "scored",
-              outcome: "passed",
-              strongestAttemptScore: 68,
-              tipIds: [],
-              score: {
-                raw: 0.68,
-                normalized: 68,
-                threshold: 50,
-                passed: true,
-                breakdown: {
-                  subject: 74,
-                },
-                scorer: {
-                  provider: "mock",
-                  model: "mock-scorer",
-                },
+            score: {
+              raw: 0.68,
+              normalized: 68,
+              threshold: 50,
+              passed: true,
+              breakdown: {
+                subject: 74,
               },
             },
-          },
-          currentLevel: levels[1],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=2&resume=1",
-              currentLevelId: "level-2",
-              currentLevelNumber: 2,
-              currentLevelTitle: "Midnight Alley Portrait",
-              levelsCleared: 1,
-              attemptsRemaining: 3,
-              bestScore: 68,
-              highestUnlockedLevelNumber: 2,
-              runId: "run-1",
-              helperText: "Pick up the same run without replaying cleared progress.",
+            result: {
+              strongestAttemptScore: 68,
             },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          }),
+          currentLevel: levels[1],
+          landing: createLandingStateFixture({
+            currentLevelId: "level-2",
+            levelsCleared: 1,
+            attemptsRemaining: 3,
+            bestScore: 68,
+            highestUnlockedLevelNumber: 2,
+          }),
+          progress: createGameProgressFixture({
             currentLevelId: "level-2",
             highestUnlockedLevelNumber: 2,
             totalAttemptsUsed: 1,
-            canResume: true,
-            lastActiveAt: "2026-04-07T08:00:00.000Z",
-            levels: [
-              {
-                levelId: "level-1",
-                status: "passed",
-                currentAttemptCycle: 1,
-                attemptsUsed: 1,
-                attemptsRemaining: 2,
-                bestScore: 68,
-                strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: "2026-04-07T08:00:00.000Z",
-                lastCompletedAt: "2026-04-07T08:00:00.000Z",
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
-                levelId: "level-2",
-                status: "in_progress",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
-              {
-                levelId: "level-3",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
-            ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -670,38 +544,128 @@ describe("ActiveLevelScreen", () => {
     expect(within(levelThreeProgress).queryByText("Current Level")).not.toBeInTheDocument();
   });
 
-  it("surfaces server submission errors without clearing the draft", async () => {
+  it("routes restart-required submit errors into a recoverable issue state", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
+      createJsonResponse(
+        {
           ok: false,
           code: "restart_required",
           message: "This level has no attempts left. Restart the level before submitting again.",
-        }),
-        {
-          status: 409,
-          headers: {
-            "content-type": "application/json",
-          },
         },
+        409,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <ActiveLevelScreen
+        state={getMockActiveLevelState()}
+        submissionEndpoint="/api/game/submit-attempt"
+        restartLevelEndpoint="/api/game/restart-level"
+      />,
+    );
+
+    const prompt = screen.getByLabelText("Prompt");
+    const promptValue = "sunlit pears and a bottle on a wooden table";
+
+    fireEvent.change(prompt, {
+      target: { value: promptValue },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("This level needs a restart")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This level has no attempts left. Restart the level before submitting again.",
+    );
+    expect(screen.getByText("Restart needed")).toBeInTheDocument();
+    expect(screen.getByText(promptValue)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Restart Level" })).toBeInTheDocument();
+  });
+
+  it("shows a recoverable issue state for unscored provider failures and returns to the prompt", async () => {
+    const promptValue = "sunlit pears and a bottle on a wooden table";
+    const fetchMock = vi.fn().mockResolvedValue(
+      createJsonResponse(
+        createSubmitAttemptResponseFixture({
+          transition: "error",
+          attempt: createLevelAttemptFixture({
+            id: "attempt-live-timeout",
+            levelId: "level-1",
+            promptText: promptValue,
+            createdAt: "2026-04-10T17:00:00.000Z",
+            consumedAttempt: false,
+            withScore: false,
+            result: {
+              status: "technical_failure",
+              outcome: "error",
+              failureKind: "timeout",
+              tipIds: [],
+              errorCode: "mock_generation_timeout",
+              errorMessage: "The mock generation fixture timed out before returning an image.",
+            },
+          }),
+          currentLevel: levels[0],
+          landing: createLandingStateFixture({
+            currentLevelId: "level-1",
+            levelsCleared: 0,
+            attemptsRemaining: 3,
+            bestScore: null,
+            highestUnlockedLevelNumber: 1,
+          }),
+          progress: createGameProgressFixture({
+            currentLevelId: "level-1",
+            totalAttemptsUsed: 0,
+            lastActiveAt: "2026-04-10T17:00:00.000Z",
+          }),
+        }),
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
 
-    const prompt = screen.getByLabelText("Prompt");
-
-    fireEvent.change(prompt, {
-      target: { value: "sunlit pears and a bottle on a wooden table" },
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: promptValue },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This level has no attempts left. Restart the level before submitting again.",
+    expect(await screen.findByText("The image took too long")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The mock generation fixture timed out before returning an image.",
     );
-    expect(prompt).toHaveValue("sunlit pears and a bottle on a wooden table");
-    expect(prompt).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByText("Attempt kept")).toBeInTheDocument();
+    expect(screen.getByText(promptValue)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Prompt" }));
+
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue(promptValue);
+  });
+
+  it("preserves the prompt after a network interruption during submission", async () => {
+    const promptValue = "sunlit pears and a bottle on a wooden table";
+    const fetchMock = vi.fn().mockRejectedValue(new Error("socket closed"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<ActiveLevelScreen state={getMockActiveLevelState()} submissionEndpoint="/api/game/submit-attempt" />);
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: promptValue },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate Match" }));
+
+    expect(await screen.findByText("The request did not go through")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("The attempt could not be submitted. Try again.");
+    expect(
+      screen.getByText(
+        "Check the connection, then return to the prompt or resume the run to confirm the latest state.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to Prompt" }));
+
+    expect(screen.getByText("Describe what matters before you submit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Prompt")).toHaveValue(promptValue);
   });
 
   it("renders a result comparison with a player-facing percentage score", () => {
@@ -849,80 +813,34 @@ describe("ActiveLevelScreen", () => {
 
   it("restarts a failed level through the live restart endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+      createJsonResponse(
+        createProgressMutationResponseFixture({
           currentLevel: levels[1],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=2&resume=1",
-              currentLevelNumber: 2,
-              currentLevelTitle: "Midnight Alley Portrait",
-              levelsCleared: 1,
-              attemptsRemaining: 3,
-              bestScore: 59,
-              helperText: "Pick up the same run without replaying cleared progress.",
-            },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          landing: createLandingStateFixture({
+            currentLevelId: "level-2",
+            levelsCleared: 1,
+            attemptsRemaining: 3,
+            bestScore: 59,
+          }),
+          progress: createGameProgressFixture({
             currentLevelId: "level-2",
             highestUnlockedLevelNumber: 2,
             totalAttemptsUsed: 3,
-            canResume: true,
             lastActiveAt: "2026-04-07T08:10:00.000Z",
             levels: [
               {
-                levelId: "level-1",
-                status: "passed",
-                currentAttemptCycle: 1,
-                attemptsUsed: 1,
-                attemptsRemaining: 2,
-                bestScore: 68,
-                strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: "2026-04-07T08:00:00.000Z",
-                lastCompletedAt: "2026-04-07T08:00:00.000Z",
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
                 levelId: "level-2",
-                status: "in_progress",
                 currentAttemptCycle: 2,
                 attemptsUsed: 0,
                 attemptsRemaining: 3,
                 bestScore: 59,
                 strongestAttemptId: "attempt-live-2",
                 unlockedAt: "2026-04-07T08:05:00.000Z",
-                completedAt: null,
-                lastCompletedAt: null,
                 lastAttemptedAt: "2026-04-07T08:10:00.000Z",
               },
-              {
-                levelId: "level-3",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
             ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -976,80 +894,34 @@ describe("ActiveLevelScreen", () => {
 
   it("keeps the restart transition successful when client analytics throws", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+      createJsonResponse(
+        createProgressMutationResponseFixture({
           currentLevel: levels[1],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=2&resume=1",
-              currentLevelNumber: 2,
-              currentLevelTitle: "Midnight Alley Portrait",
-              levelsCleared: 1,
-              attemptsRemaining: 3,
-              bestScore: 59,
-              helperText: "Pick up the same run without replaying cleared progress.",
-            },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          landing: createLandingStateFixture({
+            currentLevelId: "level-2",
+            levelsCleared: 1,
+            attemptsRemaining: 3,
+            bestScore: 59,
+          }),
+          progress: createGameProgressFixture({
             currentLevelId: "level-2",
             highestUnlockedLevelNumber: 2,
             totalAttemptsUsed: 3,
-            canResume: true,
             lastActiveAt: "2026-04-07T08:10:00.000Z",
             levels: [
               {
-                levelId: "level-1",
-                status: "passed",
-                currentAttemptCycle: 1,
-                attemptsUsed: 1,
-                attemptsRemaining: 2,
-                bestScore: 68,
-                strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: "2026-04-07T08:00:00.000Z",
-                lastCompletedAt: "2026-04-07T08:00:00.000Z",
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
                 levelId: "level-2",
-                status: "in_progress",
                 currentAttemptCycle: 2,
                 attemptsUsed: 0,
                 attemptsRemaining: 3,
                 bestScore: 59,
                 strongestAttemptId: "attempt-live-2",
                 unlockedAt: "2026-04-07T08:05:00.000Z",
-                completedAt: null,
-                lastCompletedAt: null,
                 lastAttemptedAt: "2026-04-07T08:10:00.000Z",
               },
-              {
-                levelId: "level-3",
-                status: "locked",
-                currentAttemptCycle: 1,
-                attemptsUsed: 0,
-                attemptsRemaining: 3,
-                bestScore: null,
-                strongestAttemptId: null,
-                unlockedAt: null,
-                completedAt: null,
-                lastCompletedAt: null,
-                lastAttemptedAt: null,
-              },
             ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -1079,48 +951,25 @@ describe("ActiveLevelScreen", () => {
 
   it("replays a cleared level from the summary through the live replay endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          ok: true,
+      createJsonResponse(
+        createProgressMutationResponseFixture({
           currentLevel: levels[1],
-          landing: {
-            startHref: "/play?level=1",
-            resume: {
-              available: true,
-              href: "/play?level=2&resume=1",
-              currentLevelNumber: 2,
-              currentLevelTitle: "Midnight Alley Portrait",
-              levelsCleared: 1,
-              attemptsRemaining: 3,
-              bestScore: 63,
-              helperText: "Replay any cleared level without losing your unlocked progress.",
-            },
-          },
-          progress: {
-            playerId: "player-1",
-            runId: "run-1",
+          landing: createLandingStateFixture({
+            currentLevelId: "level-2",
+            levelsCleared: 1,
+            attemptsRemaining: 3,
+            bestScore: 63,
+            highestUnlockedLevelNumber: 3,
+            helperText: "Replay any cleared level without losing your unlocked progress.",
+          }),
+          progress: createGameProgressFixture({
             currentLevelId: "level-2",
             highestUnlockedLevelNumber: 3,
             totalAttemptsUsed: 4,
-            canResume: true,
             lastActiveAt: "2026-04-07T08:15:00.000Z",
             levels: [
               {
-                levelId: "level-1",
-                status: "passed",
-                currentAttemptCycle: 1,
-                attemptsUsed: 1,
-                attemptsRemaining: 2,
-                bestScore: 68,
-                strongestAttemptId: "attempt-live-1",
-                unlockedAt: "2026-04-07T08:00:00.000Z",
-                completedAt: "2026-04-07T08:00:00.000Z",
-                lastCompletedAt: "2026-04-07T08:00:00.000Z",
-                lastAttemptedAt: "2026-04-07T08:00:00.000Z",
-              },
-              {
                 levelId: "level-2",
-                status: "in_progress",
                 currentAttemptCycle: 2,
                 attemptsUsed: 0,
                 attemptsRemaining: 3,
@@ -1134,7 +983,6 @@ describe("ActiveLevelScreen", () => {
               {
                 levelId: "level-3",
                 status: "passed",
-                currentAttemptCycle: 1,
                 attemptsUsed: 1,
                 attemptsRemaining: 2,
                 bestScore: 78,
@@ -1145,14 +993,8 @@ describe("ActiveLevelScreen", () => {
                 lastAttemptedAt: "2026-04-07T08:10:00.000Z",
               },
             ],
-          },
+          }),
         }),
-        {
-          status: 200,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);

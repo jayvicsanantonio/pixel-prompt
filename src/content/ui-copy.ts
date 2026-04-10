@@ -8,15 +8,17 @@ export const uiCopy = {
     headline: "Study the image. Write the prompt. Beat the threshold.",
     summary:
       "Each level shows a target image. Write a short prompt, get a match score, and clear the level.",
-    supportCopy:
-      "You get up to 3 attempts per level, and missed tries turn into quick feedback instead of a dead end.",
+    buildSupportCopy(maxAttempts: number) {
+      return `You get up to ${maxAttempts} attempts per level. Each miss turns into quick feedback.`;
+    },
     newRun: {
       label: "New Run",
       title: "Start fresh from Level 1",
-      body: "Jump into the opening challenge and learn the loop by playing.",
+      body: "Jump into the first challenge and learn by playing.",
       cta: "Start Game",
     },
     resume: {
+      label: "Saved Run",
       emptyLabel: "Resume saved run",
       unavailableHelper: "Resume appears here after your first scored attempt.",
       inProgressHelper: "Pick up the same run without replaying cleared progress.",
@@ -39,25 +41,25 @@ export const uiCopy = {
     },
     roundStructure: {
       label: "Round Structure",
-      title: "A fast loop that teaches observation through repetition",
+      title: "A short loop that sharpens your eye",
       steps: [
         {
           title: "Study the target",
-          body: "Look for subject, materials, lighting, and framing before you type anything.",
+          body: "Look for subject, material, light, and framing before you write.",
         },
         {
           title: "Write a tight prompt",
-          body: "Use the short prompt budget to name the details that matter most.",
+          body: "Use the short prompt limit to name the details that matter most.",
         },
         {
           title: "Score and retry",
-          body: "Check the match score, tighten the draft, and try again if you need another pass.",
+          body: "Check the match score, tighten the draft, and try again if you need to.",
         },
       ],
     },
     levelPreview: {
       label: "Level Preview",
-      title: "The first three thresholds scale from warm-up to precision",
+      title: "The first three levels move from warm-up to precision",
       buildThresholdLabel(threshold: number) {
         return `Pass at ${threshold}% match`;
       },
@@ -205,6 +207,81 @@ export const uiCopy = {
       adviceBody: "The draft stays in the textarea, so you can change the key details instead of starting over.",
       reviseCta: "Revise Prompt",
       reviewCta: "Review Result Again",
+    },
+    issue: {
+      whatHappened: "What Happened",
+      attemptsLeft: "Attempts Left",
+      submittedPrompt: "Submitted Prompt",
+      recovery: "Recovery",
+      backToPromptCta: "Back to Prompt",
+      buildEyebrow(kind: string) {
+        switch (kind) {
+          case "content_policy_rejection":
+            return "Prompt Blocked";
+          case "restart_required":
+            return "Restart Needed";
+          default:
+            return "Try Again";
+        }
+      },
+      buildTitle(kind: string) {
+        switch (kind) {
+          case "content_policy_rejection":
+            return "That prompt can't be used";
+          case "rate_limited":
+          case "submit_rate_limited":
+            return "You're sending prompts too fast";
+          case "timeout":
+            return "The image took too long";
+          case "asset_unavailable":
+            return "The result could not load";
+          case "restart_required":
+            return "This level needs a restart";
+          case "run_complete":
+            return "This run is already complete";
+          case "submit_failed":
+            return "The request did not go through";
+          case "level_changed":
+          case "level_mismatch":
+            return "The live level changed";
+          case "interrupted":
+            return "The request was interrupted";
+          default:
+            return "The attempt hit a technical issue";
+        }
+      },
+      buildBody(kind: string, attemptPreserved: boolean) {
+        const preservedSuffix = attemptPreserved ? " This did not use an attempt." : "";
+
+        switch (kind) {
+          case "content_policy_rejection":
+            return `Change the wording and submit again.${preservedSuffix}`;
+          case "rate_limited":
+          case "submit_rate_limited":
+            return `Wait a moment, then go back to the prompt and try again.${preservedSuffix}`;
+          case "restart_required":
+            return "All scored attempts are spent. Restart the level for a fresh set.";
+          case "run_complete":
+            return "Open the summary or replay a cleared level from the landing page.";
+          case "level_changed":
+          case "level_mismatch":
+            return "Go back to the prompt and continue from the current live level.";
+          case "submit_failed":
+            return "Check the connection, then return to the prompt or resume the run to confirm the latest state.";
+          default:
+            return `Go back to the prompt and try again.${preservedSuffix}`;
+        }
+      },
+      buildRecovery(kind: string, attemptPreserved: boolean) {
+        switch (kind) {
+          case "restart_required":
+            return "Restart needed";
+          case "run_complete":
+            return "Run complete";
+          default:
+            return attemptPreserved ? "Attempt kept" : "Check state";
+        }
+      },
     },
     failure: {
       eyebrow: "Level Failed",

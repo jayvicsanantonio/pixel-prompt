@@ -518,12 +518,12 @@ Tasks:
 - [x] add submit-attempt abuse controls and rate limiting (server-side fixed-window throttling now protects the costly generation/scoring path with session/fingerprint scope plus configurable burst and sustained limits)
 - [x] evaluate whether restart/replay mutations need separate throttles before external user testing (kept unthrottled for MVP limited testing because both routes are session-gated, AI-free, and already blocked outside failed/passed states; see `docs/foundation/abuse-controls-and-rate-limiting.md`)
 - [x] verify accessibility, keyboard navigation across all interactive screens, color contrast, and non-color state signaling (shared focus rings, corrected prompt-vs-system error semantics, and dialog description audit documented in `docs/foundation/accessibility-audit-2026-04-09.md`)
-- run copy audit for short, concrete, beginner-friendly language
-- improve loading and failure states
-- verify responsive behavior across mobile, tablet, and desktop breakpoints
-- add deterministic test fixtures for gameplay logic
-- validate end-to-end attempt latency and perceived responsiveness during model requests
-- verify progress-corruption protection across refresh and network interruption
+- [x] run copy audit for short, concrete, beginner-friendly language (landing copy now reads from the shared `uiCopy` source, prototype/MVP phrasing was removed, and the concise landing copy is locked by UI tests)
+- [x] improve loading and failure states (live submit failures now transition into a dedicated recoverable issue state with restart/back-to-prompt actions instead of collapsing into a generic alert on the form, and the new flows are covered in app tests)
+- [x] verify responsive behavior across mobile, tablet, and desktop breakpoints (captured landing and `/play` screenshots at mobile/tablet/desktop sizes, documented the audit in `docs/foundation/responsive-audit-2026-04-10.md`, and found no layout fixes were needed)
+- [x] add deterministic test fixtures for gameplay logic (shared deterministic builders now live in `tests/fixtures/gameplay.ts`, and the live `ActiveLevelScreen` gameplay tests use them instead of repeating large inline response payloads)
+- [x] validate end-to-end attempt latency and perceived responsiveness during model requests (added an in-flight generating-state regression in `tests/unit/app/active-level-screen.test.tsx` and documented measured local submit timings in `docs/foundation/latency-validation-2026-04-10.md`)
+- [x] verify progress-corruption protection across refresh and network interruption (server interruption/refund coverage was already in place; the client now has an explicit network-interruption recovery test in `tests/unit/app/active-level-screen.test.tsx`, and the QA matrix now reflects this as automated coverage)
 - review score fairness on hard levels
 - verify event integrity against product metrics
 - verify provider credentials and secrets remain server-only
