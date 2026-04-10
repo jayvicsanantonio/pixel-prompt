@@ -641,6 +641,7 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Restart needed")).toBeInTheDocument();
     expect(screen.getByText(promptValue)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restart Level" })).toBeInTheDocument();
+    expect(screen.getAllByText("Attempts Left")).toHaveLength(1);
   });
 
   it("routes stale-level submit errors back to landing instead of the stale prompt", async () => {
@@ -667,6 +668,7 @@ describe("ActiveLevelScreen", () => {
     expect(screen.getByText("Return to the landing page and continue from the current live level.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Back to Prompt" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Back to Landing" })).toHaveLength(2);
+    expect(screen.getAllByText("Attempts Left")).toHaveLength(1);
   });
 
   it("shows a recoverable issue state for unscored provider failures and returns to the prompt", async () => {
@@ -722,6 +724,7 @@ describe("ActiveLevelScreen", () => {
     );
     expect(screen.getByText("Attempt kept")).toBeInTheDocument();
     expect(screen.getByText(promptValue)).toBeInTheDocument();
+    expect(screen.getAllByText("Attempts Left")).toHaveLength(2);
 
     fireEvent.click(screen.getByRole("button", { name: "Back to Prompt" }));
 

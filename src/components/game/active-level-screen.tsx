@@ -88,6 +88,13 @@ const LANDING_REDIRECT_ISSUE_KINDS = [
   "run_complete",
 ] as const satisfies readonly SubmissionIssueKind[];
 
+const ISSUE_KINDS_WITH_STALE_ATTEMPT_COUNTS = [
+  "restart_required",
+  "level_changed",
+  "level_mismatch",
+  "run_complete",
+] as const satisfies readonly SubmissionIssueKind[];
+
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -997,6 +1004,9 @@ export function ActiveLevelScreen({
     if (screenMode === "issue" && submissionIssue) {
       const issueNeedsRestart = submissionIssue.kind === "restart_required";
       const issueRoutesToLanding = LANDING_REDIRECT_ISSUE_KINDS.some((kind) => kind === submissionIssue.kind);
+      const showIssueAttemptsLeft = !ISSUE_KINDS_WITH_STALE_ATTEMPT_COUNTS.some(
+        (kind) => kind === submissionIssue.kind,
+      );
 
       return (
         <>
@@ -1014,10 +1024,12 @@ export function ActiveLevelScreen({
           </article>
 
           <div className={styles.statsGrid}>
-            <article className={styles.statCard}>
-              <span className={styles.statLabel}>{uiCopy.gameplay.issue.attemptsLeft}</span>
-              <strong className={styles.statValue}>{state.attemptsRemaining}</strong>
-            </article>
+            {showIssueAttemptsLeft ? (
+              <article className={styles.statCard}>
+                <span className={styles.statLabel}>{uiCopy.gameplay.issue.attemptsLeft}</span>
+                <strong className={styles.statValue}>{state.attemptsRemaining}</strong>
+              </article>
+            ) : null}
             <article className={styles.statCard}>
               <span className={styles.statLabel}>{uiCopy.gameplay.issue.recovery}</span>
               <strong className={styles.statValue}>
