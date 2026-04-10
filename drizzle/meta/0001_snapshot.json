@@ -1,0 +1,908 @@
+{
+  "id": "fd8f26bf-4c31-46d1-978b-4d3c8656ab6d",
+  "prevId": "3c52c29a-e810-4b96-9cf5-5021ab26e34d",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.anonymous_players": {
+      "name": "anonymous_players",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "session_token_hash": {
+          "name": "session_token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_expires_at": {
+          "name": "session_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_active_at": {
+          "name": "last_active_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "anonymous_players_last_active_at_idx": {
+          "name": "anonymous_players_last_active_at_idx",
+          "columns": [
+            {
+              "expression": "last_active_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "anonymous_players_session_token_hash_unique": {
+          "name": "anonymous_players_session_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "session_token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.game_runs": {
+      "name": "game_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "player_id": {
+          "name": "player_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "run_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "current_level_id": {
+          "name": "current_level_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_level_number": {
+          "name": "current_level_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "highest_unlocked_level_number": {
+          "name": "highest_unlocked_level_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "highest_completed_level_number": {
+          "name": "highest_completed_level_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "total_attempts_used": {
+          "name": "total_attempts_used",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_active_at": {
+          "name": "last_active_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "game_runs_player_status_idx": {
+          "name": "game_runs_player_status_idx",
+          "columns": [
+            {
+              "expression": "player_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "game_runs_player_id_anonymous_players_id_fk": {
+          "name": "game_runs_player_id_anonymous_players_id_fk",
+          "tableFrom": "game_runs",
+          "tableTo": "anonymous_players",
+          "columnsFrom": [
+            "player_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "game_runs_current_level_number_check": {
+          "name": "game_runs_current_level_number_check",
+          "value": "\"game_runs\".\"current_level_number\" is null or \"game_runs\".\"current_level_number\" >= 1"
+        },
+        "game_runs_highest_unlocked_level_number_check": {
+          "name": "game_runs_highest_unlocked_level_number_check",
+          "value": "\"game_runs\".\"highest_unlocked_level_number\" >= 1"
+        },
+        "game_runs_highest_completed_level_number_check": {
+          "name": "game_runs_highest_completed_level_number_check",
+          "value": "\"game_runs\".\"highest_completed_level_number\" >= 0"
+        },
+        "game_runs_completed_not_ahead_of_unlock_check": {
+          "name": "game_runs_completed_not_ahead_of_unlock_check",
+          "value": "\"game_runs\".\"highest_completed_level_number\" <= \"game_runs\".\"highest_unlocked_level_number\""
+        },
+        "game_runs_total_attempts_used_check": {
+          "name": "game_runs_total_attempts_used_check",
+          "value": "\"game_runs\".\"total_attempts_used\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.level_attempts": {
+      "name": "level_attempts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level_id": {
+          "name": "level_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level_number": {
+          "name": "level_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt_cycle": {
+          "name": "attempt_cycle",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "attempt_number": {
+          "name": "attempt_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_text": {
+          "name": "prompt_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prompt_character_count": {
+          "name": "prompt_character_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_image_asset_key": {
+          "name": "target_image_asset_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lifecycle_status": {
+          "name": "lifecycle_status",
+          "type": "attempt_lifecycle_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "attempt_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consumed_attempt": {
+          "name": "consumed_attempt",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "generation_provider": {
+          "name": "generation_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_model": {
+          "name": "generation_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_model_version": {
+          "name": "generation_model_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generated_image_asset_key": {
+          "name": "generated_image_asset_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_seed": {
+          "name": "generation_seed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revised_prompt": {
+          "name": "revised_prompt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "generation_created_at": {
+          "name": "generation_created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score_raw": {
+          "name": "score_raw",
+          "type": "numeric(8, 6)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score_normalized": {
+          "name": "score_normalized",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score_threshold": {
+          "name": "score_threshold",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score_passed": {
+          "name": "score_passed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "score_breakdown": {
+          "name": "score_breakdown",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scoring_provider": {
+          "name": "scoring_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scoring_model": {
+          "name": "scoring_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scoring_model_version": {
+          "name": "scoring_model_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scoring_reasoning": {
+          "name": "scoring_reasoning",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scored_at": {
+          "name": "scored_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tip_ids": {
+          "name": "tip_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "provider_failure_kind": {
+          "name": "provider_failure_kind",
+          "type": "provider_failure_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_code": {
+          "name": "error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "level_attempts_run_level_created_at_idx": {
+          "name": "level_attempts_run_level_created_at_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "level_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "level_attempts_level_cycle_idx": {
+          "name": "level_attempts_level_cycle_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "level_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "attempt_cycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "level_attempts_run_id_game_runs_id_fk": {
+          "name": "level_attempts_run_id_game_runs_id_fk",
+          "tableFrom": "level_attempts",
+          "tableTo": "game_runs",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "level_attempts_run_level_cycle_attempt_unique": {
+          "name": "level_attempts_run_level_cycle_attempt_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "run_id",
+            "level_id",
+            "attempt_cycle",
+            "attempt_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "level_attempts_level_number_check": {
+          "name": "level_attempts_level_number_check",
+          "value": "\"level_attempts\".\"level_number\" >= 1"
+        },
+        "level_attempts_attempt_cycle_check": {
+          "name": "level_attempts_attempt_cycle_check",
+          "value": "\"level_attempts\".\"attempt_cycle\" >= 1"
+        },
+        "level_attempts_attempt_number_check": {
+          "name": "level_attempts_attempt_number_check",
+          "value": "\"level_attempts\".\"attempt_number\" >= 1"
+        },
+        "level_attempts_prompt_character_count_check": {
+          "name": "level_attempts_prompt_character_count_check",
+          "value": "\"level_attempts\".\"prompt_character_count\" >= 1 and \"level_attempts\".\"prompt_character_count\" <= 120"
+        },
+        "level_attempts_prompt_length_matches_count_check": {
+          "name": "level_attempts_prompt_length_matches_count_check",
+          "value": "char_length(\"level_attempts\".\"prompt_text\") = \"level_attempts\".\"prompt_character_count\""
+        },
+        "level_attempts_score_raw_range_check": {
+          "name": "level_attempts_score_raw_range_check",
+          "value": "\"level_attempts\".\"score_raw\" is null or (\"level_attempts\".\"score_raw\" >= 0 and \"level_attempts\".\"score_raw\" <= 1)"
+        },
+        "level_attempts_score_normalized_range_check": {
+          "name": "level_attempts_score_normalized_range_check",
+          "value": "\"level_attempts\".\"score_normalized\" is null or (\"level_attempts\".\"score_normalized\" >= 0 and \"level_attempts\".\"score_normalized\" <= 100)"
+        },
+        "level_attempts_score_threshold_range_check": {
+          "name": "level_attempts_score_threshold_range_check",
+          "value": "\"level_attempts\".\"score_threshold\" is null or (\"level_attempts\".\"score_threshold\" >= 0 and \"level_attempts\".\"score_threshold\" <= 100)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.request_rate_limit_buckets": {
+      "name": "request_rate_limit_buckets",
+      "schema": "",
+      "columns": {
+        "scope_key": {
+          "name": "scope_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_type": {
+          "name": "scope_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_seconds": {
+          "name": "window_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "request_count": {
+          "name": "request_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "window_started_at": {
+          "name": "window_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "request_rate_limit_buckets_updated_at_idx": {
+          "name": "request_rate_limit_buckets_updated_at_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "request_rate_limit_buckets_pk": {
+          "name": "request_rate_limit_buckets_pk",
+          "columns": [
+            "scope_key",
+            "action",
+            "window_seconds"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "request_rate_limit_buckets_scope_type_check": {
+          "name": "request_rate_limit_buckets_scope_type_check",
+          "value": "\"request_rate_limit_buckets\".\"scope_type\" in ('session', 'anonymous_fingerprint')"
+        },
+        "request_rate_limit_buckets_window_seconds_check": {
+          "name": "request_rate_limit_buckets_window_seconds_check",
+          "value": "\"request_rate_limit_buckets\".\"window_seconds\" >= 1"
+        },
+        "request_rate_limit_buckets_request_count_check": {
+          "name": "request_rate_limit_buckets_request_count_check",
+          "value": "\"request_rate_limit_buckets\".\"request_count\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.run_level_progress": {
+      "name": "run_level_progress",
+      "schema": "",
+      "columns": {
+        "run_id": {
+          "name": "run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level_id": {
+          "name": "level_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "level_number": {
+          "name": "level_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "level_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'locked'"
+        },
+        "current_attempt_cycle": {
+          "name": "current_attempt_cycle",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "attempts_used_in_cycle": {
+          "name": "attempts_used_in_cycle",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "best_score": {
+          "name": "best_score",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "strongest_attempt_id": {
+          "name": "strongest_attempt_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unlocked_at": {
+          "name": "unlocked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_completed_at": {
+          "name": "first_completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_completed_at": {
+          "name": "last_completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_attempted_at": {
+          "name": "last_attempted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "run_level_progress_status_idx": {
+          "name": "run_level_progress_status_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "run_level_progress_run_id_game_runs_id_fk": {
+          "name": "run_level_progress_run_id_game_runs_id_fk",
+          "tableFrom": "run_level_progress",
+          "tableTo": "game_runs",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "run_level_progress_pk": {
+          "name": "run_level_progress_pk",
+          "columns": [
+            "run_id",
+            "level_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "run_level_progress_run_level_number_unique": {
+          "name": "run_level_progress_run_level_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "run_id",
+            "level_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "run_level_progress_level_number_check": {
+          "name": "run_level_progress_level_number_check",
+          "value": "\"run_level_progress\".\"level_number\" >= 1"
+        },
+        "run_level_progress_current_attempt_cycle_check": {
+          "name": "run_level_progress_current_attempt_cycle_check",
+          "value": "\"run_level_progress\".\"current_attempt_cycle\" >= 1"
+        },
+        "run_level_progress_attempts_used_in_cycle_check": {
+          "name": "run_level_progress_attempts_used_in_cycle_check",
+          "value": "\"run_level_progress\".\"attempts_used_in_cycle\" >= 0 and \"run_level_progress\".\"attempts_used_in_cycle\" <= 3"
+        },
+        "run_level_progress_best_score_range_check": {
+          "name": "run_level_progress_best_score_range_check",
+          "value": "\"run_level_progress\".\"best_score\" is null or (\"run_level_progress\".\"best_score\" >= 0 and \"run_level_progress\".\"best_score\" <= 100)"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.attempt_lifecycle_status": {
+      "name": "attempt_lifecycle_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "submitted",
+        "generating",
+        "scoring",
+        "scored",
+        "content_policy_rejected",
+        "technical_failure"
+      ]
+    },
+    "public.attempt_outcome": {
+      "name": "attempt_outcome",
+      "schema": "public",
+      "values": [
+        "passed",
+        "failed",
+        "rejected",
+        "error"
+      ]
+    },
+    "public.level_status": {
+      "name": "level_status",
+      "schema": "public",
+      "values": [
+        "locked",
+        "unlocked",
+        "in_progress",
+        "passed",
+        "failed"
+      ]
+    },
+    "public.provider_failure_kind": {
+      "name": "provider_failure_kind",
+      "schema": "public",
+      "values": [
+        "content_policy_rejection",
+        "rate_limited",
+        "timeout",
+        "interrupted",
+        "technical_failure",
+        "asset_unavailable"
+      ]
+    },
+    "public.run_status": {
+      "name": "run_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "completed",
+        "abandoned"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
