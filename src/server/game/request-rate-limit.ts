@@ -128,12 +128,9 @@ function getSubmitAttemptPolicies() {
 function getAnonymousRequestFingerprint(request: Request) {
   const forwardedForHeader =
     getFirstHeaderValue(request.headers, ["x-forwarded-for", "x-real-ip", "cf-connecting-ip"]) ?? "";
-  const forwardedFor = forwardedForHeader.split(",")[0]?.trim() ?? "";
-  const userAgent = request.headers.get("user-agent") ?? "";
-  const acceptLanguage = request.headers.get("accept-language") ?? "";
-  const clientHints = getFirstHeaderValue(request.headers, ["sec-ch-ua", "sec-ch-ua-platform"]) ?? "";
+  const clientIp = forwardedForHeader.split(",")[0]?.trim() || "unknown-client-ip";
 
-  return hashKeyPart(`${forwardedFor}|${userAgent}|${acceptLanguage}|${clientHints}`);
+  return hashKeyPart(clientIp);
 }
 
 function resolveRateLimitScope(request: Request, sessionToken?: string): RateLimitScope {

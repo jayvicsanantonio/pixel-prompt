@@ -9,7 +9,7 @@ The expensive abuse surface in MVP is `POST /api/game/submit-attempt`, because e
 The server now protects that route with fixed-window throttles:
 
 - scope by valid session token when a known `pp_session` cookie exists
-- otherwise scope by anonymous request fingerprint derived from forwarded IP and browser headers
+- otherwise scope by anonymous request fingerprint derived from the trusted forwarded client IP only
 - enforce both a short burst window and a longer sustained window
 - return HTTP `429` with `Retry-After` and a player-readable recovery message
 - use PostgreSQL-backed counters when `DATABASE_URL` is configured, with an in-memory fallback for local/test paths without database persistence
