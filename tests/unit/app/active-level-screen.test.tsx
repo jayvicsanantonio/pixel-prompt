@@ -613,6 +613,58 @@ describe("ActiveLevelScreen", () => {
     expect(within(levelTwoProgress).getByText("Current Level")).toBeInTheDocument();
   });
 
+  it("keeps replay available from the progression rail when the current level is already cleared", () => {
+    const completedRunState = {
+      ...getMockActiveLevelState({ levelNumber: 3 }),
+      progressOverview: {
+        highestUnlockedLevelNumber: 3,
+        levels: [
+          {
+            levelId: "level-1",
+            levelNumber: 1,
+            levelTitle: "Sunlit Still Life",
+            threshold: 50,
+            status: "passed" as const,
+            isCurrent: false,
+            bestScore: 68,
+            attemptsRemaining: 2,
+            href: "/play?level=1",
+          },
+          {
+            levelId: "level-2",
+            levelNumber: 2,
+            levelTitle: "Midnight Alley Portrait",
+            threshold: 60,
+            status: "passed" as const,
+            isCurrent: false,
+            bestScore: 63,
+            attemptsRemaining: 2,
+            href: "/play?level=2",
+          },
+          {
+            levelId: "level-3",
+            levelNumber: 3,
+            levelTitle: "Ornate Courtyard",
+            threshold: 70,
+            status: "passed" as const,
+            isCurrent: true,
+            bestScore: 78,
+            attemptsRemaining: 2,
+            href: "/play?level=3",
+          },
+        ],
+      },
+    };
+
+    render(<ActiveLevelScreen state={completedRunState} replayLevelEndpoint="/api/game/replay-level" />);
+
+    const levelThreeProgress = screen.getByRole("article", { name: "Level 3 progression" });
+
+    expect(within(levelThreeProgress).getByText("Cleared")).toBeInTheDocument();
+    expect(within(levelThreeProgress).getByRole("button", { name: "Replay Level 3" })).toBeInTheDocument();
+    expect(within(levelThreeProgress).queryByText("Current Level")).not.toBeInTheDocument();
+  });
+
   it("surfaces server submission errors without clearing the draft", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

@@ -79,6 +79,34 @@ describe("buildLiveActiveLevelState", () => {
     );
   });
 
+  it("keeps sessionless deep links visually scoped to level one in the progression rail", () => {
+    const state = buildLiveActiveLevelState({
+      session: null,
+      requestedLevelNumber: 2,
+    });
+
+    expect(state.level).toMatchObject({
+      id: "level-2",
+      number: 2,
+    });
+    expect(state.progressOverview.highestUnlockedLevelNumber).toBe(1);
+    expect(state.progressOverview.levels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          levelId: "level-1",
+          status: "in_progress",
+          isCurrent: true,
+          attemptsRemaining: 3,
+        }),
+        expect.objectContaining({
+          levelId: "level-2",
+          status: "locked",
+          isCurrent: false,
+        }),
+      ]),
+    );
+  });
+
   it("boots a failed saved level directly into the failure screen", () => {
     let session = createGameSession({
       playerId: "player-1",

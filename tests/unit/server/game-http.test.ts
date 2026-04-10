@@ -635,8 +635,13 @@ describe("game http handlers", () => {
 
       for (const unlockAttempt of unlockAttemptsByLevelId[levelId]) {
         const unlockResponse = await submitAttempt(sessionToken, unlockAttempt.levelId, unlockAttempt.promptText);
+        const unlockBody = await unlockResponse.json();
 
         expect(unlockResponse.status).toBe(200);
+        expect(unlockBody).toMatchObject({
+          ok: true,
+          transition: "passed",
+        });
       }
 
       const submitResponse = await postSubmitAttempt(

@@ -74,7 +74,10 @@ export function buildProgressOverview(input: {
         status,
         isCurrent: level.id === input.currentLevel.id,
         bestScore: levelProgress?.bestScore ?? null,
-        attemptsRemaining: status === "locked" ? null : levelProgress?.attemptsRemaining ?? null,
+        attemptsRemaining:
+          status === "locked"
+            ? null
+            : levelProgress?.attemptsRemaining ?? (level.id === input.currentLevel.id ? level.maxAttempts : null),
         href: `/play?level=${level.number}`,
       };
     }),

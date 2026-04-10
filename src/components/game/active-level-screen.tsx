@@ -177,6 +177,21 @@ function getProgressStatusBody(levelProgress: ActiveLevelScreenState["progressOv
   }
 }
 
+function getProgressStatusClass(
+  levelStatus: ActiveLevelScreenState["progressOverview"]["levels"][number]["status"],
+) {
+  switch (levelStatus) {
+    case "passed":
+      return styles.progressStatusPassed;
+    case "failed":
+      return styles.progressStatusFailed;
+    case "locked":
+      return styles.progressStatusLocked;
+    default:
+      return styles.progressStatusActive;
+  }
+}
+
 export function ActiveLevelScreen({
   state: initialState,
   submissionEndpoint,
@@ -519,14 +534,7 @@ export function ActiveLevelScreen({
 
         <div className={styles.progressRailList}>
           {state.progressOverview.levels.map((levelProgress) => {
-            const statusClass =
-              levelProgress.status === "passed"
-                ? styles.progressStatusPassed
-                : levelProgress.status === "failed"
-                  ? styles.progressStatusFailed
-                  : levelProgress.status === "locked"
-                    ? styles.progressStatusLocked
-                    : styles.progressStatusActive;
+            const statusClass = getProgressStatusClass(levelProgress.status);
             const showAttempts =
               levelProgress.attemptsRemaining != null && (levelProgress.isCurrent || levelProgress.status === "failed");
 
@@ -582,8 +590,6 @@ export function ActiveLevelScreen({
                         {uiCopy.gameplay.failure.restartCta}
                       </a>
                     )
-                  ) : levelProgress.isCurrent ? (
-                    <span className={styles.progressActionText}>{uiCopy.gameplay.progress.currentCta}</span>
                   ) : levelProgress.status === "passed" ? (
                     replayLevelEndpoint ? (
                       <button
@@ -605,6 +611,8 @@ export function ActiveLevelScreen({
                     <Link className={styles.secondaryButton} href={levelProgress.href}>
                       {uiCopy.gameplay.progress.openCta} {levelProgress.levelNumber}
                     </Link>
+                  ) : levelProgress.isCurrent ? (
+                    <span className={styles.progressActionText}>{uiCopy.gameplay.progress.currentCta}</span>
                   ) : (
                     <span className={styles.progressActionText}>{getProgressStatusLabel(levelProgress.status)}</span>
                   )}
