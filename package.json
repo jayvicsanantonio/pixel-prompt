@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "next": "16.2.1",
+    "next": "16.2.3",
     "pg": "^8.20.0",
     "posthog-js": "^1.364.1",
     "posthog-node": "^5.28.8",
