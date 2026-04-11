@@ -3,11 +3,10 @@ import "@/server/server-only";
 import type { ImageGenerationProvider } from "./contracts";
 
 function shouldUseOpenAiImageGenerationProvider() {
-  if (process.env.NODE_ENV === "test" && process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION !== "1") {
-    return false;
-  }
+  const enabled = process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION?.trim() === "1";
+  const hasApiKey = Boolean(process.env.OPENAI_API_KEY?.trim());
 
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  return enabled && hasApiKey;
 }
 
 export async function getImageGenerationProvider(): Promise<ImageGenerationProvider> {

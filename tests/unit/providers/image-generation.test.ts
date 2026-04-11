@@ -64,6 +64,21 @@ describe("image generation providers", () => {
     expect(provider.modelRef.model).toBe(process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5");
   });
 
+  it("keeps the mock provider outside tests when the OpenAI enable flag is off", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.OPENAI_API_KEY = "sk-test";
+    delete process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+
+    try {
+      const provider = await getImageGenerationProvider();
+
+      expect(provider.providerId).toBe("mock");
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = originalNodeEnv;
+    }
+  });
+
   it("persists the mock generated image fixture to the generated output store", async () => {
     const provider = createMockImageGenerationProvider();
     const result = await provider.generateImage({

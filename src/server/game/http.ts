@@ -146,8 +146,10 @@ async function evaluateSubmissionWithProviders(input: {
   requestSignal?: AbortSignal;
   runId: string;
 }) {
-  const generationProvider = await getImageGenerationProvider();
-  const scoringProvider = await getImageScoringProvider();
+  const [generationProvider, scoringProvider] = await Promise.all([
+    getImageGenerationProvider(),
+    getImageScoringProvider(),
+  ]);
   const generationStartedAt = Date.now();
   const generationResult = await generationProvider.generateImage({
     prompt: input.promptText,

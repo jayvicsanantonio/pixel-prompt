@@ -27,4 +27,12 @@ describe("target asset store", () => {
       "PIXEL_PROMPT_TARGET_ASSET_DIR must be set to the directory containing scorer-readable target assets.",
     );
   });
+
+  it("rejects blank target asset roots after trimming", () => {
+    process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = "   ";
+
+    expect(() => getTargetAssetRoot()).toThrow(
+      "PIXEL_PROMPT_TARGET_ASSET_DIR must be set to the directory containing scorer-readable target assets.",
+    );
+  });
 });
