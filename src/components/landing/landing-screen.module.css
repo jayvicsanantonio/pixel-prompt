@@ -237,9 +237,12 @@
 }
 
 .ghostAction {
+  appearance: none;
   border: 1px dashed rgba(94, 69, 47, 0.26);
   color: var(--muted);
   background: rgba(255, 255, 255, 0.46);
+  font: inherit;
+  cursor: not-allowed;
 }
 
 .resumeReady {

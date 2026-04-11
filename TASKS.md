@@ -149,4 +149,4 @@ These are the next logical product and engineering tasks that do not depend on d
 - gameplay MVP: implemented
 - mock provider path: implemented and stable
 - live OpenAI path: implemented behind explicit runtime flags
-- verification baseline: passing on `2026-04-11`
+- verification baseline: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm env:check:preview` passed on `2026-04-11`

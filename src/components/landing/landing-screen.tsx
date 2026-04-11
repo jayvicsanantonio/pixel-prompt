@@ -77,9 +77,9 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
                       {resumeLabel}
                     </ResumeRunLink>
                   ) : (
-                    <span className={styles.ghostAction} aria-disabled="true">
+                    <button className={styles.ghostAction} type="button" disabled>
                       {resumeLabel}
-                    </span>
+                    </button>
                   )}
                 </div>
               </article>
