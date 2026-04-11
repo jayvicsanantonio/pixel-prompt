@@ -7,7 +7,11 @@ function getSingleQueryValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function PlayPage(props: PageProps<"/play">) {
+type PlayPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function PlayPage(props: PlayPageProps) {
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   const session = sessionToken ? await getSessionByToken(sessionToken) : null;

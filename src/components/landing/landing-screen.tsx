@@ -26,6 +26,8 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   const hasTrackedStartClick = useRef(false);
   const hasTrackedResumeClick = useRef(false);
   const landingCopy = uiCopy.landing;
+  const anonymousPlayerId = landingState.analytics?.anonymousPlayerId;
+  const landingRunId = landingState.analytics?.runId;
   const resumeLabel = landingCopy.resume.buildLabel(
     landingState.resume.currentLevelNumber,
     landingState.resume.available,
@@ -42,30 +44,30 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
     captureClientAnalyticsEvent({
       name: "landing_viewed",
       occurredAt,
-      anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
-      runId: landingState.analytics?.runId,
+      anonymousPlayerId,
+      runId: landingRunId,
     });
 
     if (landingState.resume.available) {
       captureClientAnalyticsEvent({
         name: "resume_offered",
         occurredAt,
-        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
+        anonymousPlayerId,
         runId: landingState.resume.runId,
         levelId: landingState.resume.currentLevelId,
         levelNumber: landingState.resume.currentLevelNumber,
         highestUnlockedLevelNumber: landingState.resume.highestUnlockedLevelNumber,
       });
     }
-  }, [landingState.resume]);
+  }, [anonymousPlayerId, landingRunId, landingState.resume]);
 
   function handleStartClick() {
     sendOneShotAnalytics(hasTrackedStartClick, (occurredAt) => {
       captureClientAnalyticsEvent({
         name: "game_started",
         occurredAt,
-        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
-        runId: landingState.analytics?.runId,
+        anonymousPlayerId,
+        runId: landingRunId,
         entry: "new",
       });
     });
@@ -82,14 +84,14 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
       captureClientAnalyticsEvent({
         name: "game_started",
         occurredAt,
-        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
+        anonymousPlayerId,
         runId: resumeState.runId,
         entry: "resume",
       });
       captureClientAnalyticsEvent({
         name: "resume_started",
         occurredAt,
-        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
+        anonymousPlayerId,
         runId: resumeState.runId,
         currentLevelId: resumeState.currentLevelId,
       });
