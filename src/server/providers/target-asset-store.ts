@@ -21,7 +21,13 @@ function getTargetAssetPath(assetKey: string) {
 }
 
 export function getTargetAssetRoot() {
-  return process.env.PIXEL_PROMPT_TARGET_ASSET_DIR?.trim() || path.join(process.cwd(), "public");
+  const configuredRoot = process.env.PIXEL_PROMPT_TARGET_ASSET_DIR?.trim();
+
+  if (configuredRoot) {
+    return configuredRoot;
+  }
+
+  throw new Error("PIXEL_PROMPT_TARGET_ASSET_DIR must be set to the directory containing scorer-readable target assets.");
 }
 
 export async function readTargetAsset(assetKey: string) {

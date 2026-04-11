@@ -55,6 +55,10 @@ if (requestedEnvironment === "staging" || requestedEnvironment === "production")
     "PIXEL_PROMPT_GENERATED_OUTPUT_DIR",
     "required in staging/production until generated outputs move to the planned durable object store",
   );
+  requireEnv(
+    "PIXEL_PROMPT_TARGET_ASSET_DIR",
+    "required in staging/production until target assets move to the planned durable object store",
+  );
 }
 
 const liveImageGenerationEnabled = readEnv("PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION") === "1";
@@ -82,6 +86,7 @@ const summaryLines = [
   `Deployment environment: ${requestedEnvironment}`,
   `Browser analytics: ${hasEnv("NEXT_PUBLIC_POSTHOG_TOKEN") ? "configured" : "disabled"}`,
   `Database: ${hasEnv("DATABASE_URL") ? "configured" : "not configured"}`,
+  `Target asset storage: ${hasEnv("PIXEL_PROMPT_TARGET_ASSET_DIR") ? "configured" : "not configured"}`,
   `Generated output storage: ${hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR") ? "configured" : "not configured"}`,
   `Live image generation: ${liveImageGenerationEnabled ? "enabled" : "disabled"}`,
   `Live scoring: ${liveScoringEnabled ? "enabled" : "disabled"}`,

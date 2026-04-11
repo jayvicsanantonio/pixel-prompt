@@ -15,8 +15,9 @@ import {
   type GameSessionSnapshot,
   type RecordAttemptResult,
 } from "@/server/game/session-state";
-import type { ProviderFailure, ProviderModelRef } from "@/server/providers";
-import { getImageGenerationProvider, getImageScoringProvider } from "@/server/providers";
+import { getImageGenerationProvider } from "@/server/providers/image-generation";
+import { getImageScoringProvider } from "@/server/providers/image-scoring";
+import type { ProviderFailure, ProviderModelRef } from "@/server/providers/contracts";
 
 import {
   buildPromptValidationFailedAnalyticsEvent,
@@ -145,8 +146,10 @@ async function evaluateSubmissionWithProviders(input: {
   requestSignal?: AbortSignal;
   runId: string;
 }) {
-  const generationProvider = getImageGenerationProvider();
-  const scoringProvider = getImageScoringProvider();
+  const [generationProvider, scoringProvider] = await Promise.all([
+    getImageGenerationProvider(),
+    getImageScoringProvider(),
+  ]);
   const generationStartedAt = Date.now();
   const generationResult = await generationProvider.generateImage({
     prompt: input.promptText,

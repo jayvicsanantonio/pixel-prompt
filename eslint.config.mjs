@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    ".tmp/**",
+    ".pixel-prompt/**",
     "next-env.d.ts",
   ]),
 ]);

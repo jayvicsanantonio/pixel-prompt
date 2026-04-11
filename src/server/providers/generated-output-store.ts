@@ -47,11 +47,11 @@ export function getGeneratedOutputRoot() {
     return configuredRoot;
   }
 
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set in production until durable object storage is configured.");
+  if (process.env.NODE_ENV !== "production") {
+    return ".pixel-prompt/generated-output";
   }
 
-  return path.join(process.cwd(), ".pixel-prompt", "generated-output");
+  throw new Error("PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set to the directory for persisted generated images.");
 }
 
 export function buildGeneratedOutputAssetKey(input: BuildGeneratedOutputAssetKeyInput) {
