@@ -4,6 +4,7 @@ import { getMockLandingState } from "@/server/game/mock-landing-state";
 describe("getMockLandingState", () => {
   it("returns the empty resume state by default", () => {
     expect(getMockLandingState()).toEqual({
+      analytics: undefined,
       startHref: "/play?level=1",
       resume: {
         available: false,
@@ -20,6 +21,10 @@ describe("getMockLandingState", () => {
 
   it("returns a mocked saved run when resume is available", () => {
     expect(getMockLandingState({ canResume: true })).toEqual({
+      analytics: {
+        anonymousPlayerId: "player-mock",
+        runId: "run-mock",
+      },
       startHref: "/play?level=1",
       resume: {
         available: true,

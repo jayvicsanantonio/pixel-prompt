@@ -106,6 +106,10 @@ describe("session-state", () => {
     });
 
     expect(buildLandingExperience(attempt.session, levels)).toEqual({
+      analytics: {
+        anonymousPlayerId: "player-1",
+        runId: "run-1",
+      },
       startHref: "/play?level=1",
       resume: {
         available: true,
