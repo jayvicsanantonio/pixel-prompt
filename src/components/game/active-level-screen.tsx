@@ -93,6 +93,7 @@ const ISSUE_KINDS_WITH_STALE_ATTEMPT_COUNTS = [
   "level_changed",
   "level_mismatch",
   "run_complete",
+  "submit_failed",
 ] as const satisfies readonly SubmissionIssueKind[];
 
 const FOCUSABLE_SELECTOR = [

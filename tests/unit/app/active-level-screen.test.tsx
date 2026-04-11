@@ -751,6 +751,7 @@ describe("ActiveLevelScreen", () => {
         "Check the connection, then return to the prompt or resume the run to confirm the latest state.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getAllByText("Attempts Left")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Back to Prompt" }));
 
