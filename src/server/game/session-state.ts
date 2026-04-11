@@ -229,6 +229,12 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
 
   if (!session || !session.progress.canResume) {
     return {
+      analytics: session
+        ? {
+            anonymousPlayerId: session.progress.playerId,
+            runId: session.progress.runId,
+          }
+        : undefined,
       startHref,
       resume: {
         available: false,
@@ -273,6 +279,10 @@ export function buildLandingExperience(session: GameSessionSnapshot | null, leve
   }
 
   return {
+    analytics: {
+      anonymousPlayerId: session.progress.playerId,
+      runId: session.progress.runId,
+    },
     startHref,
     resume: {
       available: true,

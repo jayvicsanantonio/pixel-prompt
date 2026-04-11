@@ -20,11 +20,13 @@ Current deterministic evidence still supports the seeded thresholds:
 Sources:
 
 - `docs/foundation/scoring-consistency-evaluation.md`
+- `docs/foundation/hard-level-score-fairness-review-2026-04-10.md`
 - `tests/unit/server/mock-attempt-evaluator.test.ts`
 
 Interpretation:
 
 - every seeded acceptable prompt still clears its threshold comfortably
+- the Level 3 hard-level review now shows semantically valid paraphrases clearing the threshold without letting under-specified prompts slip through
 - every seeded off-topic prompt still fails clearly
 - the deterministic scorer is still too keyword-driven to justify threshold retuning without live scorer calibration and real target/generated image review
 

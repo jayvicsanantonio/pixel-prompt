@@ -2,26 +2,73 @@ import type { AttemptGenerationDetails, AttemptResult, AttemptScore, Level } fro
 import type { ProviderFailure } from "@/server/providers";
 import { MOCK_PROVIDER_PROMPT_MARKERS } from "@/server/providers/mock-fixtures";
 
+interface PromptSignal {
+  canonical: string;
+  variants: string[];
+}
+
 interface EvaluatedAttempt {
   generation: AttemptGenerationDetails;
   result: AttemptResult;
 }
 
-const levelKeywordMap: Record<string, string[]> = {
-  "level-1": ["still", "life", "pear", "pears", "bottle", "wooden", "sunlit", "warm", "table"],
-  "level-2": ["portrait", "neon", "wet", "alley", "midnight", "cinematic", "urban", "signs"],
-  "level-3": ["courtyard", "arches", "stone", "ornate", "historical", "warm", "architecture", "layered"],
+const levelPromptSignalMap: Record<string, PromptSignal[]> = {
+  "level-1": [
+    { canonical: "still", variants: ["still"] },
+    { canonical: "life", variants: ["life"] },
+    { canonical: "pear", variants: ["pear", "pears"] },
+    { canonical: "bottle", variants: ["bottle"] },
+    { canonical: "wooden", variants: ["wooden"] },
+    { canonical: "sunlit", variants: ["sunlit"] },
+    { canonical: "warm", variants: ["warm"] },
+    { canonical: "table", variants: ["table"] },
+  ],
+  "level-2": [
+    { canonical: "portrait", variants: ["portrait"] },
+    { canonical: "neon", variants: ["neon"] },
+    { canonical: "wet", variants: ["wet"] },
+    { canonical: "alley", variants: ["alley"] },
+    { canonical: "midnight", variants: ["midnight"] },
+    { canonical: "cinematic", variants: ["cinematic"] },
+    { canonical: "urban", variants: ["urban"] },
+    { canonical: "signs", variants: ["signs"] },
+  ],
+  "level-3": [
+    { canonical: "courtyard", variants: ["courtyard", "cloister"] },
+    { canonical: "arches", variants: ["arches", "archways", "archway", "arcade"] },
+    { canonical: "stone", variants: ["stone", "sandstone", "masonry"] },
+    { canonical: "ornate", variants: ["ornate", "carved"] },
+    { canonical: "historical", variants: ["historical", "historic"] },
+    { canonical: "warm", variants: ["warm", "warmed"] },
+    { canonical: "architecture", variants: ["architecture", "architectural"] },
+    { canonical: "layered", variants: ["layered", "repeating"] },
+  ],
 };
 
-export function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore {
-  const normalizedPrompt = promptText.toLowerCase();
-  const uniqueWords = new Set(normalizedPrompt.split(/[^a-z0-9]+/).filter(Boolean));
-  const matchedKeywords = (levelKeywordMap[level.id] ?? []).filter((keyword) => uniqueWords.has(keyword));
-  const promptLengthRatio = Math.min(promptText.length / level.promptCharacterLimit, 1);
-  const normalized = Math.min(
-    98,
-    Math.round(20 + promptLengthRatio * 30 + matchedKeywords.length * 10 + Math.min(uniqueWords.size, 12) * 1.5),
+function tokenizePrompt(promptText: string) {
+  return new Set(promptText.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
+}
+
+function getMatchedPromptSignals(level: Level, promptText: string) {
+  const promptTokens = tokenizePrompt(promptText);
+
+  return (levelPromptSignalMap[level.id] ?? []).filter((signal) =>
+    signal.variants.some((variant) => promptTokens.has(variant)),
   );
+}
+
+export function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore {
+  const promptTokens = tokenizePrompt(promptText);
+  const matchedSignals = getMatchedPromptSignals(level, promptText);
+  const promptLengthRatio = Math.min(promptText.length / level.promptCharacterLimit, 1);
+  const baseNormalized = Math.min(
+    98,
+    Math.round(20 + promptLengthRatio * 30 + matchedSignals.length * 10 + Math.min(promptTokens.size, 12) * 1.5),
+  );
+  const normalized =
+    level.difficulty === "hard" && matchedSignals.length < 4
+      ? Math.min(baseNormalized, Math.max(level.threshold - 5, 0))
+      : baseNormalized;
 
   return {
     raw: Number((normalized / 100).toFixed(6)),
@@ -35,7 +82,7 @@ export function scorePromptAgainstLevel(level: Level, promptText: string): Attem
     },
     scorer: {
       provider: "mock",
-      model: "local-scoring-fixture-v1",
+      model: "local-scoring-fixture-v2",
     },
   };
 }

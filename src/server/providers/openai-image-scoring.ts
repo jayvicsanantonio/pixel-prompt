@@ -1,3 +1,5 @@
+import "@/server/server-only";
+
 import { SCORE_BREAKDOWN_DIMENSIONS, type AttemptScore } from "@/lib/game";
 
 import { createProviderAbortState } from "./abort";

@@ -53,7 +53,15 @@ describe("LandingScreen", () => {
     expect(resumeCard).toHaveTextContent("54%");
     expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
       expect.objectContaining({
+        name: "landing_viewed",
+        anonymousPlayerId: "player-mock",
+        runId: "run-mock",
+      }),
+    );
+    expect(captureClientAnalyticsEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
         name: "resume_offered",
+        anonymousPlayerId: "player-mock",
         runId: "run-mock",
         levelId: "level-2",
       }),
@@ -80,12 +88,15 @@ describe("LandingScreen", () => {
       expect.objectContaining({
         name: "game_started",
         entry: "new",
+        anonymousPlayerId: "player-mock",
+        runId: "run-mock",
       }),
     );
     expect(captureClientAnalyticsEvent).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         name: "game_started",
+        anonymousPlayerId: "player-mock",
         entry: "resume",
         runId: "run-mock",
       }),
@@ -94,6 +105,7 @@ describe("LandingScreen", () => {
       3,
       expect.objectContaining({
         name: "resume_started",
+        anonymousPlayerId: "player-mock",
         runId: "run-mock",
         currentLevelId: "level-2",
       }),

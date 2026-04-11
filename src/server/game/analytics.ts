@@ -72,6 +72,7 @@ export function buildResumeProgressAnalyticsEvents(input: ResumeProgressAnalytic
       name: "landing_viewed",
       occurredAt: input.occurredAt,
       anonymousPlayerId,
+      runId: input.session?.progress.runId,
     }),
   ];
 

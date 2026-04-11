@@ -24,6 +24,10 @@ export type LandingResumeState =
     };
 
 export interface LandingExperienceState {
+  analytics?: {
+    anonymousPlayerId?: string;
+    runId?: string;
+  };
   startHref: string;
   resume: LandingResumeState;
 }

@@ -42,12 +42,15 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
     captureClientAnalyticsEvent({
       name: "landing_viewed",
       occurredAt,
+      anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
+      runId: landingState.analytics?.runId,
     });
 
     if (landingState.resume.available) {
       captureClientAnalyticsEvent({
         name: "resume_offered",
         occurredAt,
+        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
         runId: landingState.resume.runId,
         levelId: landingState.resume.currentLevelId,
         levelNumber: landingState.resume.currentLevelNumber,
@@ -61,6 +64,8 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
       captureClientAnalyticsEvent({
         name: "game_started",
         occurredAt,
+        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
+        runId: landingState.analytics?.runId,
         entry: "new",
       });
     });
@@ -77,12 +82,14 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
       captureClientAnalyticsEvent({
         name: "game_started",
         occurredAt,
+        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
         runId: resumeState.runId,
         entry: "resume",
       });
       captureClientAnalyticsEvent({
         name: "resume_started",
         occurredAt,
+        anonymousPlayerId: landingState.analytics?.anonymousPlayerId,
         runId: resumeState.runId,
         currentLevelId: resumeState.currentLevelId,
       });

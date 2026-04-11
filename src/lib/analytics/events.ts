@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import type { AttemptId, AnonymousPlayerId, GameRunId, IsoDateTime, LevelId } from "@/lib/game";
-import type { ProviderFailureKind } from "@/server/providers";
+import type { ProviderFailureKind } from "@/server/providers/contracts";
 
 const ANALYTICS_SESSION_DISTINCT_ID_KEY = "pp_analytics_distinct_id";
 
@@ -23,6 +23,7 @@ const analyticsBaseSchema = z.object({
 
 const landingViewedEventSchema = analyticsBaseSchema.extend({
   name: z.literal("landing_viewed"),
+  runId: z.string().min(1).optional(),
 });
 
 const gameStartedEventSchema = analyticsBaseSchema.extend({
@@ -200,12 +201,12 @@ function getBrowserSessionDistinctId() {
 }
 
 export function resolveAnalyticsDistinctId(event: AnalyticsEvent) {
-  if (event.anonymousPlayerId) {
-    return event.anonymousPlayerId;
-  }
-
   if ("runId" in event && typeof event.runId === "string" && event.runId.trim().length > 0) {
     return `run:${event.runId}`;
+  }
+
+  if (event.anonymousPlayerId) {
+    return event.anonymousPlayerId;
   }
 
   return getBrowserSessionDistinctId() ?? createFallbackDistinctId(`event:${event.occurredAt}`);

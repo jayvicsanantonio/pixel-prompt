@@ -1,3 +1,5 @@
+import "@/server/server-only";
+
 import type { ImageScoringProvider } from "./contracts";
 import { createMockImageScoringProvider } from "./mock-image-scoring";
 import { hasOpenAiScoringConfig, OpenAiImageScoringProvider } from "./openai-image-scoring";

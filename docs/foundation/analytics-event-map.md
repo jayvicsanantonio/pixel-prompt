@@ -64,6 +64,7 @@ The typed event dictionary lives in `src/lib/analytics/events.ts`. This document
 - Abandonment is intentionally inferred rather than emitted as a client event, because explicit "abandon" signals are unreliable in browser sessions.
 - Generation and scoring are broken into separate operational events so provider failures and latency regressions can be isolated.
 - `attempt_resolved` is the gameplay source of truth for score, pass/fail outcome, attempts remaining, and tips-shown analysis.
+- Returning-run events now join by `runId` across client and server captures; see `docs/foundation/analytics-event-integrity-2026-04-10.md`.
 - Landing and entry-funnel events are emitted from the real UI surfaces:
   - `LandingScreen` captures `landing_viewed`, `resume_offered`, `game_started`, and `resume_started`
   - `ActiveLevelScreen` captures `level_started` and `level_restarted`

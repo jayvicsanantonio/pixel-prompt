@@ -1,3 +1,5 @@
+import "@/server/server-only";
+
 import { buildGeneratedOutputAssetKey, persistGeneratedOutput } from "./generated-output-store";
 import { createProviderAbortState } from "./abort";
 import type {

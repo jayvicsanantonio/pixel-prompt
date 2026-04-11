@@ -220,18 +220,21 @@ Not required for MVP:
 
 - Node.js 22.x was used to verify the current scaffold
 - `pnpm` 10.33.0
-- PostgreSQL for later backend tasks
-- AWS credentials and S3 buckets for later asset-storage tasks
-- OpenAI credentials for later generation and scoring tasks
+- PostgreSQL only when you want durable database-backed persistence outside the in-memory fallback
+- OpenAI credentials only when you want to enable the live generation or scoring providers
+- AWS credentials and S3 buckets are not required by the current repo runtime yet; the checked-in implementation still uses the local generated-output and target-asset roots described in `.env.example`
 
-The current scaffold boots without external service credentials. Analytics is a no-op when PostHog variables are unset.
+The app boots without external service credentials. Analytics is a no-op when PostHog variables are unset, and generation/scoring stay on the deterministic mock path unless the explicit OpenAI feature flags are enabled.
 
 ### Install
 
 ```bash
 pnpm install
 cp .env.example .env.local
+pnpm env:check:preview
 ```
+
+Use `pnpm env:check:staging` and `pnpm env:check:production` to validate non-preview deployment environments before wiring branch deployments.
 
 ### Run the App
 
@@ -260,27 +263,37 @@ pnpm test:e2e
 
 - Keep product behavior aligned with `PRD.md` before expanding scope.
 - Treat `TASKS.md` as the source for execution order and delivery tracking.
-- Build the app in vertical slices:
-  - one complete playable level flow
-  - then persistence
-  - then analytics
-  - then polish
+- Build the app in small vertical slices and close one `TASKS.md` item at a time.
 - Keep model integrations behind clear interfaces so generation or scoring providers can be swapped later.
 - Add fixtures and deterministic test hooks early to make the gameplay loop testable without depending entirely on live model outputs.
 - Define content and thresholds in structured data rather than hard-coding them into UI components.
+- Run `pnpm env:check:preview` before opening preview-focused workflow changes, and run the staging/production variants before wiring real deployment envs.
+
+## Deployment Workflow
+
+The repo now assumes this branch-to-environment flow:
+
+- pull requests and non-production branches: Vercel Preview plus the GitHub `CI` workflow
+- `staging`: long-lived staging environment
+- `main`: production
+
+The checked-in verification commands are:
+
+```bash
+pnpm env:check:preview
+pnpm env:check:staging
+pnpm env:check:production
+```
+
+Detailed branch, environment, and resource rules live in `docs/foundation/deployment-assumptions.md`.
 
 ## Contribution Guidance
 
-This section is intentionally a placeholder until the codebase structure exists.
-
-Future contribution guidance should cover:
-
-- branching strategy
-- code review expectations
-- coding standards
-- testing expectations
-- content authoring conventions for levels and target images
-- analytics event naming rules
+- Keep `PRD.md`, `README.md`, and `TASKS.md` aligned when behavior or workflow changes.
+- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` before landing non-trivial changes.
+- Add or update deterministic tests whenever you change gameplay rules, analytics emission, provider behavior, or seeded content.
+- Keep server-only env usage and provider access inside `src/server/**`.
+- Prefer documented, typed contracts over ad hoc payload shapes for gameplay, analytics, and provider boundaries.
 
 ## Project Documents
 
@@ -301,7 +314,10 @@ Practical rule:
 Current state of the repository:
 
 - product concept defined
-- core planning docs being established
-- implementation scaffold not yet started
+- three seeded levels are playable from landing through final summary
+- session-backed progression, replay, restart, and analytics are implemented
+- deterministic mock generation/scoring remains the default path for local and preview-safe flows
+- live OpenAI generation and scoring can be enabled explicitly through env flags
+- deployment env checks, CI preview gating, and deployment assumptions are now checked into the repo
 
-The next logical step is to turn the MVP scope into a concrete application scaffold and begin the first vertical slice of gameplay.
+The next logical step is to keep hardening the MVP for limited external testing while preserving `TASKS.md` as the source of execution order.

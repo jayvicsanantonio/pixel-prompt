@@ -61,6 +61,7 @@ describe("game http analytics", () => {
     expect(captureServerAnalyticsEvents.mock.calls[0]?.[0]).toEqual([
       expect.objectContaining({
         name: "landing_viewed",
+        runId: expect.any(String),
       }),
       expect.objectContaining({
         name: "resume_offered",
