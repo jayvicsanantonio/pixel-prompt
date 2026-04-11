@@ -22,6 +22,11 @@ describe("LandingScreen", () => {
     render(<LandingScreen landingState={getMockLandingState()} levels={levels} />);
 
     expect(screen.getByRole("heading", { name: /study the image\. write the prompt\./i })).toBeInTheDocument();
+    expect(
+      screen.getByText("Each level shows a target image. Write a short prompt, get a match score, and clear the level."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("You get up to 3 attempts per level. Each miss turns into quick feedback.")).toBeInTheDocument();
+    expect(screen.queryByText(/MVP loop/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Start Game" })).toHaveAttribute("href", "/play?level=1");
     expect(screen.getByText("Resume appears here after your first scored attempt.")).toBeInTheDocument();
     expect(screen.getByText("Pass at 50% match")).toBeInTheDocument();

@@ -11,6 +11,8 @@ import {
   type LandingExperienceState,
   type Level,
   type LevelAttempt,
+  type SubmissionIssueKind,
+  type SubmitAttemptTransition,
 } from "@/lib/game";
 import {
   buildFailurePreview,
@@ -30,7 +32,7 @@ interface ActiveLevelScreenProps {
 
 interface SubmitAttemptSuccessResponse {
   ok: true;
-  transition: "retry" | "passed" | "failed" | "rejected" | "error" | "completed";
+  transition: SubmitAttemptTransition;
   attempt: LevelAttempt;
   currentLevel: Level | null;
   landing: LandingExperienceState;
@@ -66,6 +68,34 @@ type ScreenFeedback =
       message: string;
     };
 
+interface SubmissionIssue {
+  kind: SubmissionIssueKind;
+  message: string;
+  attemptPreserved: boolean;
+}
+
+const ATTEMPT_PRESERVED_ERROR_CODES = [
+  "run_complete",
+  "level_changed",
+  "level_mismatch",
+  "restart_required",
+  "submit_rate_limited",
+] as const satisfies readonly SubmissionIssueKind[];
+
+const LANDING_REDIRECT_ISSUE_KINDS = [
+  "level_changed",
+  "level_mismatch",
+  "run_complete",
+] as const satisfies readonly SubmissionIssueKind[];
+
+const ISSUE_KINDS_WITH_STALE_ATTEMPT_COUNTS = [
+  "restart_required",
+  "level_changed",
+  "level_mismatch",
+  "run_complete",
+  "submit_failed",
+] as const satisfies readonly SubmissionIssueKind[];
+
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'button:not([disabled])',
@@ -83,9 +113,41 @@ function safeCaptureClientAnalyticsEvent(event: Parameters<typeof captureClientA
   }
 }
 
+function buildSubmissionIssueFromAttempt(attempt: LevelAttempt): SubmissionIssue {
+  return {
+    kind:
+      attempt.result.failureKind ??
+      (attempt.result.status === "content_policy_rejected" ? "content_policy_rejection" : "technical_failure"),
+    message: attempt.result.errorMessage ?? uiCopy.gameplay.errors.attemptIncomplete,
+    attemptPreserved: !attempt.consumedAttempt,
+  };
+}
+
+function isAttemptPreservedErrorCode(
+  code: string,
+): code is (typeof ATTEMPT_PRESERVED_ERROR_CODES)[number] {
+  return ATTEMPT_PRESERVED_ERROR_CODES.some((candidate) => candidate === code);
+}
+
+function buildSubmissionIssueFromError(code: string, message: string): SubmissionIssue {
+  if (isAttemptPreservedErrorCode(code)) {
+    return {
+      kind: code,
+      message,
+      attemptPreserved: true,
+    };
+  }
+
+  return {
+    kind: "submit_failed",
+    message,
+    attemptPreserved: false,
+  };
+}
+
 function buildLiveScreenState(input: {
   previousState: ActiveLevelScreenState;
-  transition: SubmitAttemptSuccessResponse["transition"];
+  transition: SubmitAttemptTransition;
   attempt: LevelAttempt;
   progress: GameProgress;
   currentLevel: Level | null;
@@ -211,8 +273,9 @@ export function ActiveLevelScreen({
   const [state, setState] = useState(initialState);
   const [promptText, setPromptText] = useState(initialState.promptDraft);
   const [feedback, setFeedback] = useState<ScreenFeedback | null>(null);
+  const [submissionIssue, setSubmissionIssue] = useState<SubmissionIssue | null>(null);
   const [screenMode, setScreenMode] = useState<
-    "active" | "generating" | "result" | "success" | "retry" | "failure" | "summary"
+    "active" | "generating" | "issue" | "result" | "success" | "retry" | "failure" | "summary"
   >(initialState.initialScreenMode ?? "active");
   const [isTargetExpanded, setIsTargetExpanded] = useState(false);
   const [submittedPrompt, setSubmittedPrompt] = useState(initialState.promptDraft);
@@ -291,6 +354,7 @@ export function ActiveLevelScreen({
       }
 
       setFeedback(null);
+      setSubmissionIssue(null);
       setSubmittedPrompt("");
       setPromptText("");
       setState((previousState) =>
@@ -348,6 +412,7 @@ export function ActiveLevelScreen({
     setPromptText(initialState.promptDraft);
     setSubmittedPrompt(initialState.promptDraft);
     setFeedback(null);
+    setSubmissionIssue(null);
     setScreenMode(initialState.initialScreenMode ?? "active");
     setIsSubmitting(false);
     setIsTargetExpanded(false);
@@ -463,6 +528,7 @@ export function ActiveLevelScreen({
     }
 
     setFeedback(null);
+    setSubmissionIssue(null);
     setSubmittedPrompt(trimmedPrompt);
 
     if (!submissionEndpoint) {
@@ -487,20 +553,40 @@ export function ActiveLevelScreen({
       const body = (await response.json()) as SubmitAttemptSuccessResponse | SubmitAttemptErrorResponse;
 
       if (!body.ok) {
-        setFeedback({
-          kind: body.code === "empty_prompt" || body.code === "prompt_too_long" ? "prompt" : "system",
-          message: body.message,
-        });
-        setScreenMode("active");
+        if (body.code === "empty_prompt" || body.code === "prompt_too_long") {
+          setFeedback({
+            kind: "prompt",
+            message: body.message,
+          });
+          setScreenMode("active");
+          return;
+        }
+
+        setFeedback(null);
+        setSubmissionIssue(buildSubmissionIssueFromError(body.code, body.message));
+        setScreenMode("issue");
         return;
       }
 
-      if (!body.attempt.result.score) {
-        setFeedback({
-          kind: "system",
-          message: body.attempt.result.errorMessage ?? uiCopy.gameplay.errors.attemptIncomplete,
-        });
-        setScreenMode("active");
+      if (body.attempt.result.score == null) {
+        setState((previousState) =>
+          ({
+            ...buildLiveScreenState({
+              previousState,
+              transition: body.transition,
+              attempt: body.attempt,
+              progress: body.progress,
+              currentLevel: body.currentLevel,
+            }),
+            analytics: {
+              anonymousPlayerId: body.progress.playerId,
+              runId: body.progress.runId,
+            },
+          }) satisfies ActiveLevelScreenState,
+        );
+        setFeedback(null);
+        setSubmissionIssue(buildSubmissionIssueFromAttempt(body.attempt));
+        setScreenMode("issue");
         return;
       }
 
@@ -519,17 +605,26 @@ export function ActiveLevelScreen({
           },
         }) satisfies ActiveLevelScreenState,
       );
+      setSubmissionIssue(null);
       setPromptText(trimmedPrompt);
       setScreenMode("result");
     } catch {
-      setFeedback({
-        kind: "system",
+      setFeedback(null);
+      setSubmissionIssue({
+        kind: "submit_failed",
         message: uiCopy.gameplay.errors.submitFailed,
+        attemptPreserved: false,
       });
-      setScreenMode("active");
+      setScreenMode("issue");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function returnToPrompt() {
+    setFeedback(null);
+    setSubmissionIssue(null);
+    setScreenMode("active");
   }
 
   function renderTargetStudyFrame(ariaLabel: string, expanded = false) {
@@ -903,6 +998,84 @@ export function ActiveLevelScreen({
               </button>
             </div>
           )}
+        </>
+      );
+    }
+
+    if (screenMode === "issue" && submissionIssue) {
+      const issueNeedsRestart = submissionIssue.kind === "restart_required";
+      const issueRoutesToLanding = LANDING_REDIRECT_ISSUE_KINDS.some((kind) => kind === submissionIssue.kind);
+      const showIssueAttemptsLeft = !ISSUE_KINDS_WITH_STALE_ATTEMPT_COUNTS.some(
+        (kind) => kind === submissionIssue.kind,
+      );
+
+      return (
+        <>
+          <header className={styles.panelHeader}>
+            <p className={styles.eyebrow}>{uiCopy.gameplay.issue.buildEyebrow(submissionIssue.kind)}</p>
+            <h2 className={styles.promptTitle}>{uiCopy.gameplay.issue.buildTitle(submissionIssue.kind)}</h2>
+            <p className={styles.promptBody}>
+              {uiCopy.gameplay.issue.buildBody(submissionIssue.kind, submissionIssue.attemptPreserved)}
+            </p>
+          </header>
+
+          <article className={`${styles.feedback} ${styles.error}`} role="alert">
+            <p className={styles.statLabel}>{uiCopy.gameplay.issue.whatHappened}</p>
+            <p className={styles.submittedPrompt}>{submissionIssue.message}</p>
+          </article>
+
+          <div className={styles.statsGrid}>
+            {showIssueAttemptsLeft ? (
+              <article className={styles.statCard}>
+                <span className={styles.statLabel}>{uiCopy.gameplay.issue.attemptsLeft}</span>
+                <strong className={styles.statValue}>{state.attemptsRemaining}</strong>
+              </article>
+            ) : null}
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>{uiCopy.gameplay.issue.recovery}</span>
+              <strong className={styles.statValue}>
+                {uiCopy.gameplay.issue.buildRecovery(submissionIssue.kind, submissionIssue.attemptPreserved)}
+              </strong>
+            </article>
+            <article className={styles.statCard}>
+              <span className={styles.statLabel}>{uiCopy.gameplay.issue.submittedPrompt}</span>
+              <strong className={styles.resultPrompt}>{submittedPrompt}</strong>
+            </article>
+          </div>
+
+          <div className={styles.actionRow}>
+            {issueNeedsRestart ? (
+              restartLevelEndpoint ? (
+                <button
+                  className={styles.button}
+                  type="button"
+                  disabled={isTransitioningLevel}
+                  onClick={() => {
+                    void mutateLevelProgress(restartLevelEndpoint, state.level.id);
+                  }}
+                >
+                  {uiCopy.gameplay.failure.restartCta}
+                </button>
+              ) : (
+                <a className={styles.button} href={state.continuation.restartLevelHref}>
+                  {uiCopy.gameplay.failure.restartCta}
+                </a>
+              )
+            ) : issueRoutesToLanding ? (
+              <Link className={styles.button} href="/">
+                {uiCopy.gameplay.backToLanding}
+              </Link>
+            ) : (
+              <button className={styles.button} type="button" onClick={returnToPrompt}>
+                {uiCopy.gameplay.issue.backToPromptCta}
+              </button>
+            )}
+            {issueRoutesToLanding ? null : (
+              <Link className={styles.secondaryButton} href="/">
+                {uiCopy.gameplay.backToLanding}
+              </Link>
+            )}
+          </div>
         </>
       );
     }

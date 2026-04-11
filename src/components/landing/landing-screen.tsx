@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, type MutableRefObject } from "react";
+import { uiCopy } from "@/content";
 import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT, type LandingExperienceState, type Level } from "@/lib/game";
 import styles from "./landing-screen.module.css";
@@ -10,21 +11,6 @@ interface LandingScreenProps {
   landingState: LandingExperienceState;
   levels: Level[];
 }
-
-const learningSteps = [
-  {
-    title: "Study the target",
-    body: "Keep the reference image visible while you scan for subject, material, lighting, and composition cues.",
-  },
-  {
-    title: "Write a tight prompt",
-    body: "The prompt limit keeps the challenge sharp, so players have to choose specific visual details instead of filler.",
-  },
-  {
-    title: "Score and retry",
-    body: "Each submission returns a match score, and failed attempts turn into guided practice instead of dead ends.",
-  },
-] as const;
 
 function sendOneShotAnalytics(flagRef: MutableRefObject<boolean>, emitEvents: (occurredAt: string) => void) {
   if (flagRef.current) {
@@ -39,9 +25,11 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
   const hasTrackedLandingView = useRef(false);
   const hasTrackedStartClick = useRef(false);
   const hasTrackedResumeClick = useRef(false);
-  const resumeLabel = landingState.resume.available
-    ? `Resume Level ${landingState.resume.currentLevelNumber}`
-    : "Resume saved run";
+  const landingCopy = uiCopy.landing;
+  const resumeLabel = landingCopy.resume.buildLabel(
+    landingState.resume.currentLevelNumber,
+    landingState.resume.available,
+  );
 
   useEffect(() => {
     if (hasTrackedLandingView.current) {
@@ -106,28 +94,20 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
       <section className={styles.hero}>
         <div className={styles.heroGrid}>
           <div className={styles.heroCopy}>
-            <p className={styles.eyebrow}>Prompt Match Game</p>
-            <h1 className={styles.headline}>Study the image. Write the prompt. Beat the threshold.</h1>
-            <p className={styles.summary}>
-              Pixel Prompt teaches prompt writing through short visual matching rounds. Players compare a target image,
-              describe it under pressure, and learn from the score instead of guessing what mattered.
-            </p>
-            <p className={styles.supportCopy}>
-              The MVP loop is deliberately tight: one target image, one concise prompt, one scored result, and up to{" "}
-              {MAX_ATTEMPTS_PER_LEVEL} tries to improve before the level locks.
-            </p>
+            <p className={styles.eyebrow}>{landingCopy.eyebrow}</p>
+            <h1 className={styles.headline}>{landingCopy.headline}</h1>
+            <p className={styles.summary}>{landingCopy.summary}</p>
+            <p className={styles.supportCopy}>{landingCopy.buildSupportCopy(MAX_ATTEMPTS_PER_LEVEL)}</p>
           </div>
 
           <div className={styles.actionStack}>
             <article className={styles.actionCard}>
-              <p className={styles.actionLabel}>New Run</p>
-              <h2 className={styles.actionTitle}>Start fresh from Level 1</h2>
-              <p className={styles.actionBody}>
-                First-time players get the premise in one screen and can jump straight into the opening challenge.
-              </p>
+              <p className={styles.actionLabel}>{landingCopy.newRun.label}</p>
+              <h2 className={styles.actionTitle}>{landingCopy.newRun.title}</h2>
+              <p className={styles.actionBody}>{landingCopy.newRun.body}</p>
               <div className={styles.buttonRow}>
                 <Link className={styles.primaryAction} href={landingState.startHref} onClick={handleStartClick}>
-                  Start Game
+                  {landingCopy.newRun.cta}
                 </Link>
               </div>
             </article>
@@ -137,19 +117,22 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
                 landingState.resume.available ? styles.resumeReady : styles.resumeEmpty
               }`}
             >
-              <p className={styles.actionLabel}>Saved Run</p>
+              <p className={styles.actionLabel}>{landingCopy.resume.label}</p>
               <h2 className={styles.actionTitle}>{resumeLabel}</h2>
               <div className={styles.resumeMeta}>
                 {landingState.resume.available ? (
                   <>
                     <p>
-                      Continue at <strong>{landingState.resume.currentLevelTitle}</strong> with{" "}
-                      <strong>{landingState.resume.attemptsRemaining}</strong> attempts left.
+                      {landingCopy.resume.buildProgressLine(
+                        landingState.resume.currentLevelTitle,
+                        landingState.resume.attemptsRemaining,
+                      )}
                     </p>
                     <p>
-                      Cleared <strong>{landingState.resume.levelsCleared}</strong>{" "}
-                      {landingState.resume.levelsCleared === 1 ? "level" : "levels"} and banked a best score of{" "}
-                      <strong>{landingState.resume.bestScore}%</strong> on the current run.
+                      {landingCopy.resume.buildStatsLine(
+                        landingState.resume.levelsCleared,
+                        landingState.resume.bestScore ?? 0,
+                      )}
                     </p>
                   </>
                 ) : (
@@ -173,15 +156,15 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
 
         <div className={styles.statRail}>
           <article className={styles.statCard}>
-            <span className={styles.sectionLabel}>Prompt Budget</span>
+            <span className={styles.sectionLabel}>{landingCopy.stats.promptBudget}</span>
             <strong className={styles.statValue}>{PROMPT_CHARACTER_LIMIT} chars</strong>
           </article>
           <article className={styles.statCard}>
-            <span className={styles.sectionLabel}>Attempts Per Level</span>
+            <span className={styles.sectionLabel}>{landingCopy.stats.attemptsPerLevel}</span>
             <strong className={styles.statValue}>{MAX_ATTEMPTS_PER_LEVEL}</strong>
           </article>
           <article className={styles.statCard}>
-            <span className={styles.sectionLabel}>Seeded Launch Levels</span>
+            <span className={styles.sectionLabel}>{landingCopy.stats.launchLevels}</span>
             <strong className={styles.statValue}>{levels.length}</strong>
           </article>
         </div>
@@ -189,11 +172,11 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
 
       <section className={styles.panel}>
         <header className={styles.panelHeader}>
-          <p className={styles.sectionLabel}>Round Structure</p>
-          <h2 className={styles.sectionTitle}>A fast loop that teaches observation through repetition</h2>
+          <p className={styles.sectionLabel}>{landingCopy.roundStructure.label}</p>
+          <h2 className={styles.sectionTitle}>{landingCopy.roundStructure.title}</h2>
         </header>
         <div className={styles.stepGrid}>
-          {learningSteps.map((step, index) => (
+          {landingCopy.roundStructure.steps.map((step, index) => (
             <article key={step.title} className={styles.stepCard}>
               <span className={styles.stepNumber}>{index + 1}</span>
               <h3 className={styles.stepTitle}>{step.title}</h3>
@@ -205,8 +188,8 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
 
       <section className={styles.panel}>
         <header className={styles.panelHeader}>
-          <p className={styles.sectionLabel}>Level Preview</p>
-          <h2 className={styles.sectionTitle}>The first three thresholds scale from warm-up to precision</h2>
+          <p className={styles.sectionLabel}>{landingCopy.levelPreview.label}</p>
+          <h2 className={styles.sectionTitle}>{landingCopy.levelPreview.title}</h2>
         </header>
         <div className={styles.levelGrid}>
           {levels.map((level) => (
@@ -216,7 +199,7 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
               </p>
               <h3 className={styles.levelTitle}>{level.title}</h3>
               <p className={styles.levelDescription}>{level.description}</p>
-              <p className={styles.levelThreshold}>Pass at {level.threshold}% match</p>
+              <p className={styles.levelThreshold}>{landingCopy.levelPreview.buildThresholdLabel(level.threshold)}</p>
             </article>
           ))}
         </div>

@@ -27,6 +27,15 @@ export type AttemptLifecycleStatus =
 export type AttemptOutcome = "passed" | "failed" | "rejected" | "error";
 export type ScoreBreakdownDimension = (typeof SCORE_BREAKDOWN_DIMENSIONS)[number];
 export type LevelDifficulty = "easy" | "medium" | "hard";
+export type SubmitAttemptTransition = "retry" | "passed" | "failed" | "rejected" | "error" | "completed";
+export type SubmissionIssueKind =
+  | AttemptFailureKind
+  | "level_changed"
+  | "level_mismatch"
+  | "restart_required"
+  | "run_complete"
+  | "submit_failed"
+  | "submit_rate_limited";
 
 export interface LevelTargetImage {
   assetKey: string;
