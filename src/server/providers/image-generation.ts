@@ -1,3 +1,5 @@
+import "@/server/server-only";
+
 import type { ImageGenerationProvider } from "./contracts";
 import { createMockImageGenerationProvider } from "./mock-image-generation";
 import { hasOpenAiImageGenerationConfig, OpenAiImageGenerationProvider } from "./openai-image-generation";

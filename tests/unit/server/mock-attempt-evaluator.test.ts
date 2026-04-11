@@ -122,4 +122,49 @@ describe("mock attempt evaluator", () => {
       expect(score.normalized).toBeLessThan(level.threshold);
     }
   });
+
+  it("lets hard-level paraphrases pass when they preserve the scene structure with equivalent cues", () => {
+    const level = levels.find((candidate) => candidate.id === "level-3");
+
+    expect(level).toBeDefined();
+
+    if (!level) {
+      throw new Error('Missing level "level-3".');
+    }
+
+    const paraphrasePrompts = [
+      "sun-warmed cloister with repeating archways",
+      "historic cloister of carved stone archways",
+    ];
+
+    for (const prompt of paraphrasePrompts) {
+      const score = scorePromptAgainstLevel(level, prompt);
+
+      expect(score.passed).toBe(true);
+      expect(score.normalized).toBeGreaterThanOrEqual(level.threshold + 5);
+    }
+  });
+
+  it("keeps long but under-specified hard-level prompts below the threshold", () => {
+    const level = levels.find((candidate) => candidate.id === "level-3");
+
+    expect(level).toBeDefined();
+
+    if (!level) {
+      throw new Error('Missing level "level-3".');
+    }
+
+    const underSpecifiedPrompts = [
+      "stone courtyard with arches",
+      "warm historical courtyard",
+      "historic carved masonry atrium with dramatic columns and open skylight",
+    ];
+
+    for (const prompt of underSpecifiedPrompts) {
+      const score = scorePromptAgainstLevel(level, prompt);
+
+      expect(score.passed).toBe(false);
+      expect(score.normalized).toBeLessThan(level.threshold);
+    }
+  });
 });

@@ -64,4 +64,18 @@ describe("analytics configuration", () => {
     expect(first).toMatch(/^session:/);
     expect(second).toBe(first);
   });
+
+  it("prefers run identity when both runId and anonymous player identity are present", () => {
+    const distinctId = resolveAnalyticsDistinctId({
+      name: "resume_offered",
+      occurredAt: "2026-04-10T17:00:00.000Z",
+      anonymousPlayerId: "anon_123",
+      runId: "run_123",
+      levelId: "level-2",
+      levelNumber: 2,
+      highestUnlockedLevelNumber: 3,
+    });
+
+    expect(distinctId).toBe("run:run_123");
+  });
 });

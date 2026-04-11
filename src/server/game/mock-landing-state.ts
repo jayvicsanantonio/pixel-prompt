@@ -12,6 +12,7 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
 
   if (!canResume) {
     return {
+      analytics: undefined,
       startHref,
       resume: {
         available: false,
@@ -33,6 +34,10 @@ export function getMockLandingState(options?: MockLandingStateOptions): LandingE
   }
 
   return {
+    analytics: {
+      anonymousPlayerId: "player-mock",
+      runId: "run-mock",
+    },
     startHref,
     resume: {
       available: true,

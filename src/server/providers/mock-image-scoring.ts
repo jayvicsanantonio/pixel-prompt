@@ -6,7 +6,7 @@ import { MOCK_PROVIDER_PROMPT_MARKERS } from "./mock-fixtures";
 
 const MOCK_SCORING_MODEL: ProviderModelRef = {
   provider: "mock",
-  model: "local-scoring-fixture-v1",
+  model: "local-scoring-fixture-v2",
 };
 
 export class MockImageScoringProvider implements ImageScoringProvider {
@@ -65,7 +65,7 @@ export class MockImageScoringProvider implements ImageScoringProvider {
       createdAt: new Date().toISOString(),
       provider: this.modelRef,
       score: scorePromptAgainstLevel(level, request.prompt),
-      reasoning: "Mock scorer used prompt keyword coverage while the real scorer was disabled.",
+      reasoning: "Mock scorer used deterministic level signal coverage while the real scorer was disabled.",
     };
   }
 }

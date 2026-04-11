@@ -11,9 +11,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "env:check:preview": "node scripts/check-deploy-env.mjs preview",
+    "env:check:staging": "node scripts/check-deploy-env.mjs staging",
+    "env:check:production": "node scripts/check-deploy-env.mjs production"
   },
   "dependencies": {
+    "@next/env": "16.2.3",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.3",
     "pg": "^8.20.0",

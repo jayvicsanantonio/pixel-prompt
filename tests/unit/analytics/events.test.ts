@@ -78,4 +78,15 @@ describe("analytics events", () => {
     expect(started.entry).toBe("new");
     expect(levelStarted.levelId).toBe("level-1");
   });
+
+  it("allows returning-run landing events to carry run identity", () => {
+    const event = defineAnalyticsEvent({
+      name: "landing_viewed",
+      occurredAt: "2026-04-10T17:00:00.000Z",
+      anonymousPlayerId: "anon_123",
+      runId: "run_123",
+    });
+
+    expect(event.runId).toBe("run_123");
+  });
 });

@@ -524,11 +524,11 @@ Tasks:
 - [x] add deterministic test fixtures for gameplay logic (shared deterministic builders now live in `tests/fixtures/gameplay.ts`, and the live `ActiveLevelScreen` gameplay tests use them instead of repeating large inline response payloads)
 - [x] validate end-to-end attempt latency and perceived responsiveness during model requests (added an in-flight generating-state regression in `tests/unit/app/active-level-screen.test.tsx` and documented measured local submit timings in `docs/foundation/latency-validation-2026-04-10.md`)
 - [x] verify progress-corruption protection across refresh and network interruption (server interruption/refund coverage was already in place; the client now has an explicit network-interruption recovery test in `tests/unit/app/active-level-screen.test.tsx`, and the QA matrix now reflects this as automated coverage)
-- review score fairness on hard levels
-- verify event integrity against product metrics
-- verify provider credentials and secrets remain server-only
-- configure staging and production deployment paths, environment variables, and preview workflow
-- clean up developer docs and deployment assumptions
+- [x] review score fairness on hard levels (the default mock scorer now uses Level 3 architectural paraphrase signals plus a hard-level coverage guard, with deterministic evidence captured in `docs/foundation/hard-level-score-fairness-review-2026-04-10.md` and `tests/unit/server/mock-attempt-evaluator.test.ts`)
+- [x] verify event integrity against product metrics (returning-run analytics now join by `runId` across client and server captures, with the audit and remaining first-touch gap documented in `docs/foundation/analytics-event-integrity-2026-04-10.md` and regression coverage added in the analytics and landing test suites)
+- [x] verify provider credentials and secrets remain server-only (server secret modules now import a local server-only guard, client runtime files are regression-tested for server imports and secret env references, and the 2026-04-10 production bundle audit in `docs/foundation/server-only-secrets-audit-2026-04-10.md` found no secret env names in `.next/static`)
+- [x] configure staging and production deployment paths, environment variables, and preview workflow (added `scripts/check-deploy-env.mjs`, `pnpm env:check:*` commands, and `.github/workflows/ci.yml`, and updated `docs/foundation/deployment-assumptions.md` with the current branch/environment contract and preview gate)
+- [x] clean up developer docs and deployment assumptions (the README now reflects the actual playable repo state, mock-by-default provider setup, contribution expectations, and checked-in deployment env-check workflow, while `docs/foundation/deployment-assumptions.md` now documents the current preview/staging/production contract)
 
 Exit criteria:
 
