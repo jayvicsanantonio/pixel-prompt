@@ -37,7 +37,7 @@ function normalizeAssetKey(assetKey: string) {
 }
 
 function getGeneratedOutputPath(assetKey: string) {
-  return path.join(getGeneratedOutputRoot(), normalizeAssetKey(assetKey));
+  return path.join(/* turbopackIgnore: true */ getGeneratedOutputRoot(), normalizeAssetKey(assetKey));
 }
 
 export function getGeneratedOutputRoot() {
@@ -62,10 +62,10 @@ export function buildGeneratedOutputAssetKey(input: BuildGeneratedOutputAssetKey
 
 export async function persistGeneratedOutput(input: PersistGeneratedOutputInput) {
   const outputPath = getGeneratedOutputPath(input.assetKey);
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, Buffer.from(input.imageBase64, "base64"));
+  await mkdir(/* turbopackIgnore: true */ path.dirname(outputPath), { recursive: true });
+  await writeFile(/* turbopackIgnore: true */ outputPath, Buffer.from(input.imageBase64, "base64"));
 }
 
 export async function readGeneratedOutput(assetKey: string) {
-  return readFile(getGeneratedOutputPath(assetKey));
+  return readFile(/* turbopackIgnore: true */ getGeneratedOutputPath(assetKey));
 }

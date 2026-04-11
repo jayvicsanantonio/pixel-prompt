@@ -17,7 +17,7 @@ function normalizeAssetKey(assetKey: string) {
 }
 
 function getTargetAssetPath(assetKey: string) {
-  return path.join(getTargetAssetRoot(), normalizeAssetKey(assetKey));
+  return path.join(/* turbopackIgnore: true */ getTargetAssetRoot(), normalizeAssetKey(assetKey));
 }
 
 export function getTargetAssetRoot() {
@@ -31,5 +31,5 @@ export function getTargetAssetRoot() {
 }
 
 export async function readTargetAsset(assetKey: string) {
-  return readFile(getTargetAssetPath(assetKey));
+  return readFile(/* turbopackIgnore: true */ getTargetAssetPath(assetKey));
 }
