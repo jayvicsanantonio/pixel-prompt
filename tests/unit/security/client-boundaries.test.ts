@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 const CLIENT_ONLY_FILES = [path.join(process.cwd(), "instrumentation-client.ts")];
 const SECRET_ENV_NAMES = [
   "OPENAI_API_KEY",
+  "OPENAI_IMAGE_MODEL",
+  "OPENAI_SCORING_MODEL",
   "DATABASE_URL",
   "AWS_REGION",
   "S3_TARGET_ASSET_BUCKET",
@@ -13,6 +15,8 @@ const SECRET_ENV_NAMES = [
   "PIXEL_PROMPT_TARGET_ASSET_DIR",
   "PIXEL_PROMPT_GENERATED_OUTPUT_DIR",
 ];
+const serverImportPattern =
+  /\bfrom\s+["'](?:@\/server\/|(?:\.\.\/)+server\/|(?:\.\/)+server\/|\/server\/)|\bimport\(\s*["'](?:@\/server\/|(?:\.\.\/)+server\/|(?:\.\/)+server\/|\/server\/)/;
 
 async function collectSourceFiles(root: string): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
@@ -38,7 +42,7 @@ async function collectClientRuntimeFiles() {
   for (const filePath of sourceFiles) {
     const contents = await readFile(filePath, "utf8");
 
-    if (contents.startsWith('"use client";') || contents.startsWith("'use client';")) {
+    if (/^['"]use client['"]/.test(contents.trim())) {
       clientFiles.push(filePath);
     }
   }
@@ -55,7 +59,7 @@ describe("client/server boundaries", () => {
     for (const filePath of clientRuntimeFiles) {
       const contents = await readFile(filePath, "utf8");
 
-      expect(contents).not.toContain("@/server/");
+      expect(contents).not.toMatch(serverImportPattern);
 
       for (const envName of SECRET_ENV_NAMES) {
         expect(contents).not.toContain(envName);

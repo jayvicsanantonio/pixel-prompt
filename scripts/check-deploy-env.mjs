@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+import nextEnv from "@next/env";
+
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(process.cwd());
+
 const requestedEnvironment = process.argv[2] ?? process.env.VERCEL_ENV ?? "preview";
 const supportedEnvironments = new Set(["preview", "staging", "production"]);
 

@@ -49,9 +49,7 @@ function tokenizePrompt(promptText: string) {
   return new Set(promptText.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
 }
 
-function getMatchedPromptSignals(level: Level, promptText: string) {
-  const promptTokens = tokenizePrompt(promptText);
-
+function getMatchedPromptSignals(level: Level, promptTokens: Set<string>) {
   return (levelPromptSignalMap[level.id] ?? []).filter((signal) =>
     signal.variants.some((variant) => promptTokens.has(variant)),
   );
@@ -59,7 +57,7 @@ function getMatchedPromptSignals(level: Level, promptText: string) {
 
 export function scorePromptAgainstLevel(level: Level, promptText: string): AttemptScore {
   const promptTokens = tokenizePrompt(promptText);
-  const matchedSignals = getMatchedPromptSignals(level, promptText);
+  const matchedSignals = getMatchedPromptSignals(level, promptTokens);
   const promptLengthRatio = Math.min(promptText.length / level.promptCharacterLimit, 1);
   const baseNormalized = Math.min(
     98,

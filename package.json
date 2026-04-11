@@ -17,6 +17,7 @@
     "env:check:production": "node scripts/check-deploy-env.mjs production"
   },
   "dependencies": {
+    "@next/env": "16.2.1",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.1",
     "pg": "^8.20.0",
