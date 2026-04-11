@@ -27,7 +27,6 @@ export default async function PlayPage(props: PlayPageProps) {
 
   return (
     <ActiveLevelScreen
-      key={`${state.level.id}:${state.promptDraft}`}
       state={state}
       submissionEndpoint="/api/game/submit-attempt"
       restartLevelEndpoint="/api/game/restart-level"

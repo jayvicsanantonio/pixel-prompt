@@ -37,6 +37,12 @@
   border: 1px solid rgba(94, 69, 47, 0.16);
   background: rgba(255, 255, 255, 0.66);
   font-weight: 600;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
 
 .topMeta {
@@ -75,6 +81,7 @@
   margin-top: 0.35rem;
   font-size: 1.1rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .shell {
@@ -235,6 +242,7 @@
   font-size: clamp(2rem, 4vw, 3rem);
   line-height: 0.96;
   letter-spacing: -0.05em;
+  text-wrap: balance;
 }
 
 .targetDescription,
@@ -246,127 +254,6 @@
 .inspectControls {
   display: grid;
   gap: 0.6rem;
-}
-
-.studyFrame {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  overflow: hidden;
-  border-radius: 28px;
-  border: 1px solid rgba(94, 69, 47, 0.14);
-  background:
-    radial-gradient(circle at 24% 22%, rgba(255, 240, 185, 0.9), transparent 18%),
-    linear-gradient(180deg, #f0d9bb 0%, #c48e53 48%, #8a5530 100%);
-}
-
-.studyFrameExpanded {
-  aspect-ratio: 1 / 1;
-  max-height: min(72vh, 38rem);
-}
-
-.wall,
-.table,
-.bottle,
-.plate,
-.pearLeft,
-.pearRight,
-.cloth {
-  position: absolute;
-}
-
-.wall {
-  inset: 0 0 28% 0;
-  background: linear-gradient(180deg, rgba(242, 220, 188, 0.94), rgba(233, 198, 151, 0.9));
-}
-
-.table {
-  inset: auto 0 0 0;
-  height: 30%;
-  background:
-    linear-gradient(180deg, rgba(116, 71, 40, 0.18), rgba(76, 41, 20, 0.26)),
-    repeating-linear-gradient(
-      90deg,
-      rgba(126, 77, 42, 0.95) 0,
-      rgba(126, 77, 42, 0.95) 12%,
-      rgba(154, 96, 55, 0.95) 12%,
-      rgba(154, 96, 55, 0.95) 24%
-    );
-}
-
-.cloth {
-  left: 16%;
-  bottom: 17%;
-  width: 34%;
-  height: 15%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 36% 32%, rgba(255, 241, 206, 0.95), rgba(238, 202, 146, 0.92));
-  transform: rotate(-6deg);
-}
-
-.bottle {
-  left: 25%;
-  bottom: 24%;
-  width: 14%;
-  height: 34%;
-  border-radius: 42% 42% 18% 18%;
-  background:
-    linear-gradient(180deg, rgba(177, 118, 67, 0.16), rgba(82, 131, 95, 0.94)),
-    linear-gradient(180deg, rgba(196, 228, 181, 0.48), transparent 70%);
-  box-shadow: 0 14px 28px rgba(52, 72, 54, 0.18);
-}
-
-.bottle::before {
-  content: "";
-  position: absolute;
-  left: 34%;
-  top: -18%;
-  width: 32%;
-  height: 26%;
-  border-radius: 16px 16px 4px 4px;
-  background: linear-gradient(180deg, rgba(80, 122, 88, 0.92), rgba(52, 89, 64, 0.96));
-}
-
-.plate {
-  right: 16%;
-  bottom: 16%;
-  width: 36%;
-  height: 17%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 36%, rgba(247, 232, 214, 0.98), rgba(212, 180, 140, 0.98));
-  box-shadow: inset 0 -8px 18px rgba(151, 112, 69, 0.15);
-}
-
-.pearLeft,
-.pearRight {
-  width: 14%;
-  height: 22%;
-  border-radius: 46% 46% 52% 52%;
-  background: radial-gradient(circle at 34% 28%, rgba(255, 239, 170, 0.95), rgba(224, 164, 54, 0.98));
-  box-shadow: 0 10px 18px rgba(140, 86, 22, 0.18);
-}
-
-.pearLeft {
-  right: 32%;
-  bottom: 18%;
-  transform: rotate(-8deg);
-}
-
-.pearRight {
-  right: 18%;
-  bottom: 20%;
-  transform: rotate(9deg);
-}
-
-.pearLeft::before,
-.pearRight::before {
-  content: "";
-  position: absolute;
-  top: -12%;
-  left: 48%;
-  width: 0.28rem;
-  height: 0.9rem;
-  border-radius: 999px;
-  background: #6d4a2a;
 }
 
 .statsGrid {
@@ -387,6 +274,7 @@
   margin-top: 0.35rem;
   font-size: 1.3rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .form {
@@ -426,6 +314,7 @@
 
 .counter {
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .counterOverLimit {
@@ -446,6 +335,12 @@
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 16px 32px rgba(127, 54, 23, 0.22);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
 
 .secondaryButton {
@@ -461,6 +356,32 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.backLink:hover,
+.button:hover,
+.secondaryButton:hover {
+  transform: translateY(-1px);
+}
+
+.backLink:active,
+.button:active,
+.secondaryButton:active {
+  transform: translateY(0);
+}
+
+.button:focus-visible,
+.secondaryButton:focus-visible,
+.backLink:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 .inspectButton {
@@ -566,6 +487,7 @@
   font-size: clamp(2.4rem, 5vw, 4rem);
   line-height: 0.9;
   letter-spacing: -0.06em;
+  font-variant-numeric: tabular-nums;
 }
 
 .scoreMeta {
@@ -785,5 +707,24 @@
   .badge {
     min-width: 0;
     flex: 1 1 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backLink,
+  .button,
+  .secondaryButton {
+    transition: none;
+  }
+
+  .backLink:hover,
+  .button:hover,
+  .secondaryButton:hover {
+    transform: none;
+  }
+
+  .progressBar {
+    width: 56%;
+    animation: none;
   }
 }

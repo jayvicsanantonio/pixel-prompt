@@ -1,10 +1,7 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useRef, type MutableRefObject } from "react";
 import { uiCopy } from "@/content";
-import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import { MAX_ATTEMPTS_PER_LEVEL, PROMPT_CHARACTER_LIMIT, type LandingExperienceState, type Level } from "@/lib/game";
+import { TargetStudyFrame } from "@/components/game/target-study-frame";
+import { LandingAnalytics, NewRunLink, ResumeRunLink } from "./landing-telemetry";
 import styles from "./landing-screen.module.css";
 
 interface LandingScreenProps {
@@ -12,94 +9,18 @@ interface LandingScreenProps {
   levels: Level[];
 }
 
-function sendOneShotAnalytics(flagRef: MutableRefObject<boolean>, emitEvents: (occurredAt: string) => void) {
-  if (flagRef.current) {
-    return;
-  }
-
-  flagRef.current = true;
-  emitEvents(new Date().toISOString());
-}
-
 export function LandingScreen({ landingState, levels }: LandingScreenProps) {
-  const hasTrackedLandingView = useRef(false);
-  const hasTrackedStartClick = useRef(false);
-  const hasTrackedResumeClick = useRef(false);
   const landingCopy = uiCopy.landing;
-  const anonymousPlayerId = landingState.analytics?.anonymousPlayerId;
-  const landingRunId = landingState.analytics?.runId;
+  const featuredLevel = levels[0];
   const resumeLabel = landingCopy.resume.buildLabel(
     landingState.resume.currentLevelNumber,
     landingState.resume.available,
   );
 
-  useEffect(() => {
-    if (hasTrackedLandingView.current) {
-      return;
-    }
-
-    hasTrackedLandingView.current = true;
-    const occurredAt = new Date().toISOString();
-
-    captureClientAnalyticsEvent({
-      name: "landing_viewed",
-      occurredAt,
-      anonymousPlayerId,
-      runId: landingRunId,
-    });
-
-    if (landingState.resume.available) {
-      captureClientAnalyticsEvent({
-        name: "resume_offered",
-        occurredAt,
-        anonymousPlayerId,
-        runId: landingState.resume.runId,
-        levelId: landingState.resume.currentLevelId,
-        levelNumber: landingState.resume.currentLevelNumber,
-        highestUnlockedLevelNumber: landingState.resume.highestUnlockedLevelNumber,
-      });
-    }
-  }, [anonymousPlayerId, landingRunId, landingState.resume]);
-
-  function handleStartClick() {
-    sendOneShotAnalytics(hasTrackedStartClick, (occurredAt) => {
-      captureClientAnalyticsEvent({
-        name: "game_started",
-        occurredAt,
-        anonymousPlayerId,
-        runId: landingRunId,
-        entry: "new",
-      });
-    });
-  }
-
-  function handleResumeClick() {
-    const resumeState = landingState.resume;
-
-    if (!resumeState.available) {
-      return;
-    }
-
-    sendOneShotAnalytics(hasTrackedResumeClick, (occurredAt) => {
-      captureClientAnalyticsEvent({
-        name: "game_started",
-        occurredAt,
-        anonymousPlayerId,
-        runId: resumeState.runId,
-        entry: "resume",
-      });
-      captureClientAnalyticsEvent({
-        name: "resume_started",
-        occurredAt,
-        anonymousPlayerId,
-        runId: resumeState.runId,
-        currentLevelId: resumeState.currentLevelId,
-      });
-    });
-  }
-
   return (
     <main className={styles.page}>
+      <LandingAnalytics landingState={landingState} />
+
       <section className={styles.hero}>
         <div className={styles.heroGrid}>
           <div className={styles.heroCopy}>
@@ -107,60 +28,88 @@ export function LandingScreen({ landingState, levels }: LandingScreenProps) {
             <h1 className={styles.headline}>{landingCopy.headline}</h1>
             <p className={styles.summary}>{landingCopy.summary}</p>
             <p className={styles.supportCopy}>{landingCopy.buildSupportCopy(MAX_ATTEMPTS_PER_LEVEL)}</p>
+            <div className={styles.actionStack}>
+              <article className={styles.actionCard}>
+                <p className={styles.actionLabel}>{landingCopy.newRun.label}</p>
+                <h2 className={styles.actionTitle}>{landingCopy.newRun.title}</h2>
+                <p className={styles.actionBody}>{landingCopy.newRun.body}</p>
+                <div className={styles.buttonRow}>
+                  <NewRunLink className={styles.primaryAction} href={landingState.startHref} landingState={landingState}>
+                    {landingCopy.newRun.cta}
+                  </NewRunLink>
+                </div>
+              </article>
+
+              <article
+                className={`${styles.actionCard} ${
+                  landingState.resume.available ? styles.resumeReady : styles.resumeEmpty
+                }`}
+              >
+                <p className={styles.actionLabel}>{landingCopy.resume.label}</p>
+                <h2 className={styles.actionTitle}>{resumeLabel}</h2>
+                <div className={styles.resumeMeta}>
+                  {landingState.resume.available ? (
+                    <>
+                      <p>
+                        {landingCopy.resume.buildProgressLine(
+                          landingState.resume.currentLevelTitle,
+                          landingState.resume.attemptsRemaining,
+                        )}
+                      </p>
+                      <p>
+                        {landingCopy.resume.buildStatsLine(
+                          landingState.resume.levelsCleared,
+                          landingState.resume.bestScore ?? 0,
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <p>{landingState.resume.helperText}</p>
+                  )}
+                </div>
+                <div className={styles.buttonRow}>
+                  {landingState.resume.available ? (
+                    <ResumeRunLink
+                      className={styles.secondaryAction}
+                      href={landingState.resume.href}
+                      landingState={landingState}
+                    >
+                      {resumeLabel}
+                    </ResumeRunLink>
+                  ) : (
+                    <span className={styles.ghostAction} aria-disabled="true">
+                      {resumeLabel}
+                    </span>
+                  )}
+                </div>
+              </article>
+            </div>
           </div>
 
-          <div className={styles.actionStack}>
-            <article className={styles.actionCard}>
-              <p className={styles.actionLabel}>{landingCopy.newRun.label}</p>
-              <h2 className={styles.actionTitle}>{landingCopy.newRun.title}</h2>
-              <p className={styles.actionBody}>{landingCopy.newRun.body}</p>
-              <div className={styles.buttonRow}>
-                <Link className={styles.primaryAction} href={landingState.startHref} onClick={handleStartClick}>
-                  {landingCopy.newRun.cta}
-                </Link>
+          {featuredLevel ? (
+            <aside className={styles.previewPanel} aria-labelledby="featured-level-title">
+              <div className={styles.previewHeader}>
+                <p className={styles.sectionLabel}>Featured Target</p>
+                <h2 className={styles.previewTitle} id="featured-level-title">
+                  {featuredLevel.title}
+                </h2>
+                <p className={styles.previewBody}>{featuredLevel.description}</p>
               </div>
-            </article>
 
-            <article
-              className={`${styles.actionCard} ${
-                landingState.resume.available ? styles.resumeReady : styles.resumeEmpty
-              }`}
-            >
-              <p className={styles.actionLabel}>{landingCopy.resume.label}</p>
-              <h2 className={styles.actionTitle}>{resumeLabel}</h2>
-              <div className={styles.resumeMeta}>
-                {landingState.resume.available ? (
-                  <>
-                    <p>
-                      {landingCopy.resume.buildProgressLine(
-                        landingState.resume.currentLevelTitle,
-                        landingState.resume.attemptsRemaining,
-                      )}
-                    </p>
-                    <p>
-                      {landingCopy.resume.buildStatsLine(
-                        landingState.resume.levelsCleared,
-                        landingState.resume.bestScore ?? 0,
-                      )}
-                    </p>
-                  </>
-                ) : (
-                  <p>{landingState.resume.helperText}</p>
-                )}
+              <TargetStudyFrame
+                ariaLabel={`Target preview for ${featuredLevel.title}: ${featuredLevel.targetImage.alt}`}
+                className={styles.previewFrame}
+              />
+
+              <div className={styles.previewMeta}>
+                <span className={styles.metricPill}>Threshold {featuredLevel.threshold}%</span>
+                <span className={styles.metricPill}>{featuredLevel.difficulty} difficulty</span>
+                <span className={styles.metricPill}>{featuredLevel.theme} study</span>
               </div>
-              <div className={styles.buttonRow}>
-                {landingState.resume.available ? (
-                  <Link className={styles.secondaryAction} href={landingState.resume.href} onClick={handleResumeClick}>
-                    {resumeLabel}
-                  </Link>
-                ) : (
-                  <span className={styles.ghostAction} aria-disabled="true">
-                    {resumeLabel}
-                  </span>
-                )}
-              </div>
-            </article>
-          </div>
+
+              <p className={styles.previewCaption}>{featuredLevel.targetImage.alt}</p>
+            </aside>
+          ) : null}
         </div>
 
         <div className={styles.statRail}>

@@ -652,7 +652,7 @@ The PRD is considered implemented at MVP level when:
 
 ## Immediate Next Tasks
 
-The first concrete tasks for the repo should be:
+Historical bootstrap tasks for this repo were:
 
 - choose and scaffold the app stack, analytics provider, and baseline AI providers
 - choose the asset storage strategy for target and generated images
@@ -664,6 +664,11 @@ The first concrete tasks for the repo should be:
 - implement mocked attempt submission so the frontend loop can be built before provider wiring
 - add `README.md` setup instructions once the scaffold exists
 
+Current state:
+
+- no unchecked implementation tasks remain in this execution plan
+- future work should be added here before starting a new build phase
+
 ## Status
 
 - `PRD.md`: defined
@@ -671,5 +676,5 @@ The first concrete tasks for the repo should be:
 - `TASKS.md`: defined
 - app scaffold: completed
 - provider integrations: completed for backend attempt processing and frontend live submission wiring
-- gameplay implementation: in progress, with Phase 1 Agent 5 copy deliverables completed and Phase 2 restart/replay wiring now in place
-- gameplay implementation: in progress, with the live `/play` progression rail now surfacing locked/current/cleared states and replay entry points for cleared levels
+- gameplay implementation: completed across the MVP loop, including live `/play` progression, restart, replay, summary, and resume flows
+- verification status: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` all passed on 2026-04-11
