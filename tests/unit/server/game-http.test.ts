@@ -1309,7 +1309,7 @@ describe("game http handlers", () => {
       markGenerationStarted = resolve;
     });
 
-    vi.spyOn(imageGenerationProviderModule, "getImageGenerationProvider").mockReturnValue({
+    vi.spyOn(imageGenerationProviderModule, "getImageGenerationProvider").mockResolvedValue({
       providerId: "delayed-mock-image",
       modelRef: {
         provider: "mock",

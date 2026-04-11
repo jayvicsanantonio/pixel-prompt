@@ -529,6 +529,8 @@ Tasks:
 - [x] verify provider credentials and secrets remain server-only (server secret modules now import a local server-only guard, client runtime files are regression-tested for server imports and secret env references, and the 2026-04-10 production bundle audit in `docs/foundation/server-only-secrets-audit-2026-04-10.md` found no secret env names in `.next/static`)
 - [x] configure staging and production deployment paths, environment variables, and preview workflow (added `scripts/check-deploy-env.mjs`, `pnpm env:check:*` commands, and `.github/workflows/ci.yml`, and updated `docs/foundation/deployment-assumptions.md` with the current branch/environment contract and preview gate)
 - [x] clean up developer docs and deployment assumptions (the README now reflects the actual playable repo state, mock-by-default provider setup, contribution expectations, and checked-in deployment env-check workflow, while `docs/foundation/deployment-assumptions.md` now documents the current preview/staging/production contract)
+- [x] eliminate the Turbopack production-build NFT warning caused by provider asset path resolution (server-side target and generated asset stores now require explicit env roots instead of repo-root fallbacks, `.env.example` seeds local development with `public` and `.pixel-prompt/generated-output`, and staging/production require explicit target/generated asset roots in the deployment contract)
+- [ ] investigate and eliminate the remaining Turbopack NFT warnings on the OpenAI scoring bundle path (`next build` still traces `target-asset-store.ts -> openai-image-scoring.ts -> image-scoring.ts -> http.ts` even after lazy provider loading and explicit asset-root env contracts)
 
 Exit criteria:
 

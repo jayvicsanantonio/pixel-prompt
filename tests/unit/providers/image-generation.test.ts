@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +9,6 @@ import {
   createMockImageGenerationProvider,
   getImageGenerationProvider,
   OpenAiImageGenerationProvider,
-  readGeneratedOutput,
 } from "@/server/providers";
 
 describe("image generation providers", () => {
@@ -46,20 +45,20 @@ describe("image generation providers", () => {
     }
   });
 
-  it("defaults to the mock provider in tests even when an API key is present", () => {
+  it("defaults to the mock provider in tests even when an API key is present", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
     delete process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
 
-    const provider = getImageGenerationProvider();
+    const provider = await getImageGenerationProvider();
 
     expect(provider.providerId).toBe("mock");
   });
 
-  it("allows opting into the OpenAI provider in tests", () => {
+  it("allows opting into the OpenAI provider in tests", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
     process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = "1";
 
-    const provider = getImageGenerationProvider();
+    const provider = await getImageGenerationProvider();
 
     expect(provider.providerId).toBe("openai");
     expect(provider.modelRef.model).toBe(process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5");
@@ -83,7 +82,7 @@ describe("image generation providers", () => {
       throw new Error("Expected the mock provider to succeed.");
     }
 
-    const generatedOutput = await readGeneratedOutput(result.assetKey);
+    const generatedOutput = await readFile(path.join(generatedOutputDir, result.assetKey));
 
     expect(generatedOutput.length).toBeGreaterThan(0);
   });
@@ -160,7 +159,7 @@ describe("image generation providers", () => {
       throw new Error("Expected the OpenAI provider to succeed.");
     }
 
-    const generatedOutput = await readGeneratedOutput(result.assetKey);
+    const generatedOutput = await readFile(path.join(generatedOutputDir, result.assetKey));
 
     expect(generatedOutput.length).toBeGreaterThan(0);
   });

@@ -66,8 +66,8 @@ As of 2026-04-10, the repository now encodes the deployment path assumptions in 
 | --- | --- | --- | --- |
 | Development | local machine | none strictly required | analytics is disabled when PostHog vars are unset; provider paths stay mocked unless explicitly enabled |
 | Preview | pull requests and non-production branches | none strictly required by default | preview may run with mocked providers and without durable database/storage config |
-| Staging | `staging` branch | `DATABASE_URL`, `PIXEL_PROMPT_GENERATED_OUTPUT_DIR` | use non-production resources only; enable live OpenAI provider flags only when non-production quotas are ready |
-| Production | `main` branch | `DATABASE_URL`, `PIXEL_PROMPT_GENERATED_OUTPUT_DIR` | production is the only environment allowed to use production analytics and provider credentials |
+| Staging | `staging` branch | `DATABASE_URL`, `PIXEL_PROMPT_TARGET_ASSET_DIR`, `PIXEL_PROMPT_GENERATED_OUTPUT_DIR` | use non-production resources only; enable live OpenAI provider flags only when non-production quotas are ready |
+| Production | `main` branch | `DATABASE_URL`, `PIXEL_PROMPT_TARGET_ASSET_DIR`, `PIXEL_PROMPT_GENERATED_OUTPUT_DIR` | production is the only environment allowed to use production analytics and provider credentials |
 
 Conditional rules:
 

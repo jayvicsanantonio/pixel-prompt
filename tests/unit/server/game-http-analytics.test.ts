@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { rm } from "node:fs/promises";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { captureServerAnalyticsEvents } = vi.hoisted(() => ({
   captureServerAnalyticsEvents: vi.fn(),
@@ -11,6 +14,7 @@ vi.mock("@/server/analytics", () => ({
 import { GET as getResumeProgress } from "@/app/api/game/resume-progress/route";
 import { POST as postSubmitAttempt } from "@/app/api/game/submit-attempt/route";
 import { getOrCreateSession, resetSessionStoreForTests, SESSION_COOKIE_NAME } from "@/server/game/session-store";
+import { seedMockTargetAssets } from "@/server/providers";
 
 async function createSessionToken() {
   const { token } = await getOrCreateSession();
@@ -22,9 +26,41 @@ async function flushBackgroundAnalytics() {
 }
 
 describe("game http analytics", () => {
+  const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+  const originalTargetAssetDir = process.env.PIXEL_PROMPT_TARGET_ASSET_DIR;
+  let generatedOutputDir = "";
+  let targetAssetDir = "";
+
   beforeEach(() => {
     resetSessionStoreForTests();
     captureServerAnalyticsEvents.mockReset();
+  });
+
+  beforeEach(async () => {
+    generatedOutputDir = path.join(process.cwd(), ".tmp", `vitest-analytics-generated-${Date.now()}`);
+    targetAssetDir = path.join(process.cwd(), ".tmp", `vitest-analytics-targets-${Date.now()}`);
+    process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = generatedOutputDir;
+    process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = targetAssetDir;
+    await rm(generatedOutputDir, { recursive: true, force: true });
+    await rm(targetAssetDir, { recursive: true, force: true });
+    await seedMockTargetAssets(targetAssetDir, ["level-1", "level-2", "level-3"]);
+  });
+
+  afterEach(async () => {
+    await rm(generatedOutputDir, { recursive: true, force: true });
+    await rm(targetAssetDir, { recursive: true, force: true });
+
+    if (originalGeneratedOutputDir === undefined) {
+      delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+    } else {
+      process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = originalGeneratedOutputDir;
+    }
+
+    if (originalTargetAssetDir === undefined) {
+      delete process.env.PIXEL_PROMPT_TARGET_ASSET_DIR;
+    } else {
+      process.env.PIXEL_PROMPT_TARGET_ASSET_DIR = originalTargetAssetDir;
+    }
   });
 
   it("emits landing and resume-offered events from resume-progress", async () => {
