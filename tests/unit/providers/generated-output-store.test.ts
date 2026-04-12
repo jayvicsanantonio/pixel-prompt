@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
+import os from "node:os";
+import path from "node:path";
 
 import { getGeneratedOutputRoot } from "@/server/providers";
 
@@ -43,6 +45,15 @@ describe("generated output store", () => {
     expect(getGeneratedOutputRoot()).toBe(".pixel-prompt/generated-output");
   });
 
+  it("uses ephemeral temp storage for preview deployments without a configured root", () => {
+    delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+    process.env.VERCEL_ENV = "preview";
+
+    expect(getGeneratedOutputRoot()).toBe(path.join(os.tmpdir(), "pixel-prompt", "generated-output"));
+  });
+
   it("requires a configured generated output root in production without blob token", () => {
     delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
     delete process.env.BLOB_READ_WRITE_TOKEN;
@@ -50,7 +61,7 @@ describe("generated output store", () => {
     delete process.env.VERCEL_ENV;
 
     expect(() => getGeneratedOutputRoot()).toThrow(
-      "BLOB_READ_WRITE_TOKEN or PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set for persisted generated images in production.",
+      "PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set for local filesystem storage in production.",
     );
   });
 });

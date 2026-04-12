@@ -86,7 +86,7 @@ if (requestedEnvironment === "preview" && !hasEnv("DATABASE_URL")) {
 }
 
 if (requestedEnvironment === "preview" && !hasEnv("BLOB_READ_WRITE_TOKEN") && !hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR")) {
-  warnings.push("BLOB_READ_WRITE_TOKEN and PIXEL_PROMPT_GENERATED_OUTPUT_DIR are unset; preview will use ephemeral temp storage for generated images.");
+  warnings.push("BLOB_READ_WRITE_TOKEN and PIXEL_PROMPT_GENERATED_OUTPUT_DIR are unset; preview will use ephemeral temp storage for generated images (not persisted across deploys).");
 }
 
 if (!liveImageGenerationEnabled || !liveScoringEnabled) {

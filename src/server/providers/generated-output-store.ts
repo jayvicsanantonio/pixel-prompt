@@ -1,6 +1,7 @@
 import "@/server/server-only";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const formatExtensions = {
@@ -58,6 +59,10 @@ function shouldUseVercelBlobStore() {
   return process.env.NODE_ENV === "production" && Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
 }
 
+function isVercelPreview() {
+  return process.env.VERCEL_ENV === "preview";
+}
+
 function getLocalGeneratedOutputRoot() {
   const configuredRoot = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR?.trim();
 
@@ -69,8 +74,12 @@ function getLocalGeneratedOutputRoot() {
     return ".pixel-prompt/generated-output";
   }
 
+  if (isVercelPreview()) {
+    return path.join(os.tmpdir(), "pixel-prompt", "generated-output");
+  }
+
   throw new Error(
-    "BLOB_READ_WRITE_TOKEN or PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set for persisted generated images in production.",
+    "PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set for local filesystem storage in production.",
   );
 }
 
@@ -126,7 +135,9 @@ export async function readGeneratedOutput(assetKey: string): Promise<Buffer> {
       throw new Error(`Generated output not found in blob store: "${assetKey}".`);
     }
 
-    const response = await fetch(blob.url);
+    const response = await fetch(blob.url, {
+      signal: AbortSignal.timeout(30_000),
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to fetch generated output from blob store: "${assetKey}" (${response.status}).`);
