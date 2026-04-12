@@ -132,6 +132,7 @@ The most important runtime switches are:
 - `PIXEL_PROMPT_ENABLE_OPENAI_SCORING`
 - `PIXEL_PROMPT_GENERATED_OUTPUT_DIR`
 - `PIXEL_PROMPT_TARGET_ASSET_DIR`
+- `BLOB_READ_WRITE_TOKEN`
 
 Preview env validation:
 
@@ -147,7 +148,7 @@ These are product and implementation limitations, not deployment instructions:
 
 - The shipped level set is intentionally small: three seeded levels
 - The mock provider path is the stable default; live provider quality still depends on calibration and asset strategy
-- Generated output persistence still assumes filesystem-backed storage in the checked-in runtime
+- Generated output persistence uses Vercel Blob Storage in production and local filesystem in development
 - Anonymous progress is browser-scoped; account systems are out of scope for the MVP
 
 ## Documentation

@@ -24,6 +24,7 @@ The source audit showed that server secret env vars remain scoped to server modu
 - `S3_GENERATED_OUTPUT_BUCKET`
 - `PIXEL_PROMPT_TARGET_ASSET_DIR`
 - `PIXEL_PROMPT_GENERATED_OUTPUT_DIR`
+- `BLOB_READ_WRITE_TOKEN`
 
 ## Hardening Applied
 

@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import os from "node:os";
-import path from "node:path";
 
 import { getGeneratedOutputRoot } from "@/server/providers";
 
@@ -8,6 +6,7 @@ describe("generated output store", () => {
   const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
   const originalNodeEnv = process.env.NODE_ENV;
   const originalVercelEnv = process.env.VERCEL_ENV;
+  const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   afterEach(() => {
     if (originalGeneratedOutputDir === undefined) {
@@ -22,6 +21,12 @@ describe("generated output store", () => {
       delete process.env.VERCEL_ENV;
     } else {
       process.env.VERCEL_ENV = originalVercelEnv;
+    }
+
+    if (originalBlobToken === undefined) {
+      delete process.env.BLOB_READ_WRITE_TOKEN;
+    } else {
+      process.env.BLOB_READ_WRITE_TOKEN = originalBlobToken;
     }
   });
 
@@ -38,21 +43,14 @@ describe("generated output store", () => {
     expect(getGeneratedOutputRoot()).toBe(".pixel-prompt/generated-output");
   });
 
-  it("uses ephemeral temp storage for preview deployments without a configured root", () => {
+  it("requires a configured generated output root in production without blob token", () => {
     delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
-    (process.env as Record<string, string | undefined>).NODE_ENV = "production";
-    process.env.VERCEL_ENV = "preview";
-
-    expect(getGeneratedOutputRoot()).toBe(path.join(os.tmpdir(), "pixel-prompt", "generated-output"));
-  });
-
-  it("requires a configured generated output root in production", () => {
-    delete process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+    delete process.env.BLOB_READ_WRITE_TOKEN;
     (process.env as Record<string, string | undefined>).NODE_ENV = "production";
     delete process.env.VERCEL_ENV;
 
     expect(() => getGeneratedOutputRoot()).toThrow(
-      "PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set to the directory for persisted generated images.",
+      "BLOB_READ_WRITE_TOKEN or PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set for persisted generated images in production.",
     );
   });
 });
