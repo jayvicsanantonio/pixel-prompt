@@ -126,16 +126,21 @@ export async function readGeneratedOutput(assetKey: string): Promise<Buffer> {
   const normalizedKey = normalizeAssetKey(assetKey);
 
   if (shouldUseVercelBlobStore()) {
-    const { list } = await import("@vercel/blob");
+    const { head } = await import("@vercel/blob");
 
-    const listing = await list({ prefix: normalizedKey, limit: 1 });
-    const blob = listing.blobs.find((b) => b.pathname === normalizedKey);
+    let blobMetadata;
 
-    if (!blob) {
-      throw new Error(`Generated output not found in blob store: "${assetKey}".`);
+    try {
+      blobMetadata = await head(normalizedKey);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === "BlobNotFoundError") {
+        throw new Error(`Generated output not found in blob store: "${assetKey}".`);
+      }
+
+      throw error;
     }
 
-    const response = await fetch(blob.url, {
+    const response = await fetch(blobMetadata.url, {
       signal: AbortSignal.timeout(30_000),
     });
 
