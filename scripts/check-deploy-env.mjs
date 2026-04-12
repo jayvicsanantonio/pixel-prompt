@@ -52,8 +52,8 @@ requirePairedEnv(
 if (requestedEnvironment === "staging" || requestedEnvironment === "production") {
   requireEnv("DATABASE_URL", "required for durable server-persisted progress outside preview");
   requireEnv(
-    "PIXEL_PROMPT_GENERATED_OUTPUT_DIR",
-    "required in staging/production until generated outputs move to the planned durable object store",
+    "BLOB_READ_WRITE_TOKEN",
+    "required in staging/production for persisting generated images to Vercel Blob Storage",
   );
   requireEnv(
     "PIXEL_PROMPT_TARGET_ASSET_DIR",
@@ -85,8 +85,8 @@ if (requestedEnvironment === "preview" && !hasEnv("DATABASE_URL")) {
   warnings.push("DATABASE_URL is unset; preview will rely on the current in-memory/session-backed fallback.");
 }
 
-if (requestedEnvironment === "preview" && !hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR")) {
-  warnings.push("PIXEL_PROMPT_GENERATED_OUTPUT_DIR is unset; preview will use ephemeral temp storage for generated images.");
+if (requestedEnvironment === "preview" && !hasEnv("BLOB_READ_WRITE_TOKEN") && !hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR")) {
+  warnings.push("BLOB_READ_WRITE_TOKEN and PIXEL_PROMPT_GENERATED_OUTPUT_DIR are unset; preview will use ephemeral temp storage for generated images (not persisted across deploys).");
 }
 
 if (!liveImageGenerationEnabled || !liveScoringEnabled) {
@@ -98,7 +98,7 @@ const summaryLines = [
   `Browser analytics: ${hasEnv("NEXT_PUBLIC_POSTHOG_TOKEN") ? "configured" : "disabled"}`,
   `Database: ${hasEnv("DATABASE_URL") ? "configured" : "not configured"}`,
   `Target asset storage: ${hasEnv("PIXEL_PROMPT_TARGET_ASSET_DIR") ? "configured" : "not configured"}`,
-  `Generated output storage: ${hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR") ? "configured" : "not configured"}`,
+  `Generated output storage: ${hasEnv("BLOB_READ_WRITE_TOKEN") ? "vercel-blob" : hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR") ? "local-filesystem" : "not configured"}`,
   `Live image generation: ${liveImageGenerationEnabled ? "enabled" : "disabled"}`,
   `Live scoring: ${liveScoringEnabled ? "enabled" : "disabled"}`,
 ];

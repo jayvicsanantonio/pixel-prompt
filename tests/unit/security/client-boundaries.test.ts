@@ -14,6 +14,7 @@ const SECRET_ENV_NAMES = [
   "S3_GENERATED_OUTPUT_BUCKET",
   "PIXEL_PROMPT_TARGET_ASSET_DIR",
   "PIXEL_PROMPT_GENERATED_OUTPUT_DIR",
+  "BLOB_READ_WRITE_TOKEN",
 ];
 const serverImportPattern =
   /\bfrom\s+["'](?:@\/server\/|(?:\.\.\/)+server\/|(?:\.\/)+server\/|\/server\/)|\bimport\(\s*["'](?:@\/server\/|(?:\.\.\/)+server\/|(?:\.\/)+server\/|\/server\/)/;
