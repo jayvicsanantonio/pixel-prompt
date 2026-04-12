@@ -1,6 +1,7 @@
 import "@/server/server-only";
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const formatExtensions = {
@@ -40,6 +41,10 @@ function getGeneratedOutputPath(assetKey: string) {
   return path.join(/* turbopackIgnore: true */ getGeneratedOutputRoot(), normalizeAssetKey(assetKey));
 }
 
+function shouldUsePreviewGeneratedOutputFallback() {
+  return process.env.NODE_ENV === "production" && process.env.VERCEL_ENV?.trim() === "preview";
+}
+
 export function getGeneratedOutputRoot() {
   const configuredRoot = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR?.trim();
 
@@ -49,6 +54,10 @@ export function getGeneratedOutputRoot() {
 
   if (process.env.NODE_ENV !== "production") {
     return ".pixel-prompt/generated-output";
+  }
+
+  if (shouldUsePreviewGeneratedOutputFallback()) {
+    return path.join(os.tmpdir(), "pixel-prompt", "generated-output");
   }
 
   throw new Error("PIXEL_PROMPT_GENERATED_OUTPUT_DIR must be set to the directory for persisted generated images.");

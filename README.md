@@ -61,22 +61,22 @@ Provider model:
 
 ## Repository Map
 
-High-signal folders:
+High-signal folders (relative to repo root):
 
-- [src/app](/Users/jayvicsanantonio/Developer/pixel-prompt/src/app) App Router pages and API routes
-- [src/components](/Users/jayvicsanantonio/Developer/pixel-prompt/src/components) landing and gameplay UI
-- [src/content](/Users/jayvicsanantonio/Developer/pixel-prompt/src/content) seeded levels, tips, and shared UI copy
-- [src/lib/game](/Users/jayvicsanantonio/Developer/pixel-prompt/src/lib/game) shared game-domain types and screen helpers
-- [src/server/game](/Users/jayvicsanantonio/Developer/pixel-prompt/src/server/game) gameplay rules, session orchestration, and HTTP handlers
-- [src/server/providers](/Users/jayvicsanantonio/Developer/pixel-prompt/src/server/providers) generation and scoring adapters
-- [tests](/Users/jayvicsanantonio/Developer/pixel-prompt/tests) unit and UI coverage
+- [src/app](./src/app) App Router pages and API routes
+- [src/components](./src/components) landing and gameplay UI
+- [src/content](./src/content) seeded levels, tips, and shared UI copy
+- [src/lib/game](./src/lib/game) shared game-domain types and screen helpers
+- [src/server/game](./src/server/game) gameplay rules, session orchestration, and HTTP handlers
+- [src/server/providers](./src/server/providers) generation and scoring adapters
+- [tests](./tests) unit and UI coverage
 
 Useful entry points:
 
-- [src/app/page.tsx](/Users/jayvicsanantonio/Developer/pixel-prompt/src/app/page.tsx)
-- [src/app/play/page.tsx](/Users/jayvicsanantonio/Developer/pixel-prompt/src/app/play/page.tsx)
-- [src/components/landing/landing-screen.tsx](/Users/jayvicsanantonio/Developer/pixel-prompt/src/components/landing/landing-screen.tsx)
-- [src/components/game/active-level-screen.tsx](/Users/jayvicsanantonio/Developer/pixel-prompt/src/components/game/active-level-screen.tsx)
+- [src/app/page.tsx](./src/app/page.tsx)
+- [src/app/play/page.tsx](./src/app/play/page.tsx)
+- [src/components/landing/landing-screen.tsx](./src/components/landing/landing-screen.tsx)
+- [src/components/game/active-level-screen.tsx](./src/components/game/active-level-screen.tsx)
 
 ## Local Setup
 
@@ -152,5 +152,5 @@ These are product and implementation limitations, not deployment instructions:
 
 ## Documentation
 
-- [PRD.md](/Users/jayvicsanantonio/Developer/pixel-prompt/PRD.md) is the product truth
-- [TASKS.md](/Users/jayvicsanantonio/Developer/pixel-prompt/TASKS.md) is the execution history and current work log
+- [PRD.md](./PRD.md) is the product truth
+- [TASKS.md](./TASKS.md) is the execution history and current work log
