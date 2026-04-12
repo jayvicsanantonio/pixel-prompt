@@ -1,12 +1,36 @@
 # Pixel Prompt
 
-## Overview
+Pixel Prompt is a web-based prompt-writing game. Players study a target image, write a short image-generation prompt, submit it, and try to beat a level-specific match threshold.
 
-Pixel Prompt is a web-first game that teaches players how to write better image-generation prompts by turning prompt writing into a visual matching challenge.
+The repository is no longer just a planning scaffold. It contains a playable MVP with landing, start/resume, active play, retry, restart, replay, and final-summary flows.
 
-In each level, the player sees a target image and must write a short prompt that recreates something visually similar. The app generates an image from the player's prompt, compares it to the target, produces a similarity score, and decides whether the player passed the level. The game is designed to make prompt writing feel approachable, skill-based, and replayable.
+## Current MVP
 
-This repository is the starting point for the product and implementation work.
+The shipped MVP focuses on a short three-level training loop:
+
+- Landing page with a concise game pitch, new-run CTA, resume CTA, and a featured target preview
+- Anonymous server-backed progress with resume via an HTTP-only session cookie
+- Active level screen with:
+  - level number
+  - required threshold
+  - attempts remaining
+  - visible target image while writing
+  - mobile target-image expansion
+- Submission flow with prompt validation, generating state, score result, retry tips, and pass/fail transitions
+- Replay-safe progression rail so completed levels can be revisited without reducing unlocked progress
+- Final summary with levels completed, attempts used, best scores, and improvement trend
+
+Current seeded thresholds:
+
+- Level 1: `50%`
+- Level 2: `60%`
+- Level 3: `70%`
+
+Core gameplay constraints:
+
+- Prompt limit: `120` characters
+- Max scored attempts per level: `3`
+- Invalid submissions and technical failures do not consume attempts
 
 ## Why This App Exists
 
@@ -20,211 +44,50 @@ Pixel Prompt exists to train that observational skill through repeated play:
 - Retry tips turn failure into guided practice.
 - Level progression gives structure and a sense of mastery.
 
-## Core Gameplay Summary
+## Stack
 
-The core round loop is straightforward:
+- Framework: Next.js App Router
+- UI: React 19 + TypeScript + CSS Modules
+- Package manager: `pnpm`
+- Persistence: PostgreSQL via Drizzle ORM, with fallback behavior when `DATABASE_URL` is unset
+- Analytics: PostHog
+- Tests: Vitest, React Testing Library, Playwright
 
-1. The player enters a level and sees a target image.
-2. The player writes a short prompt within a tight character limit.
-3. The system generates an image from that prompt.
-4. The system compares the generated image with the target image.
-5. The player receives a score and pass/fail result.
-6. If the score is below the threshold, the player gets targeted tips and can try again.
-7. The player either clears the level, uses all attempts, or exits and resumes later.
+Provider model:
 
-Baseline game rules:
+- Default local/runtime path: deterministic mock generation and mock scoring
+- Opt-in live generation: `gpt-image-1.5`
+- Opt-in live scoring: `gpt-5.4-mini`
 
-- Prompt length target: about 120 characters maximum
-- Attempts per level: up to 3
-- Difficulty: threshold increases by level
-- Early thresholds:
-  - Level 1: 50%
-  - Level 2: 60%
-  - Level 3: 70%
+## Repository Map
 
-## Target Audience
+High-signal folders (relative to repo root):
 
-Primary audience:
+- [src/app](./src/app) App Router pages and API routes
+- [src/components](./src/components) landing and gameplay UI
+- [src/content](./src/content) seeded levels, tips, and shared UI copy
+- [src/lib/game](./src/lib/game) shared game-domain types and screen helpers
+- [src/server/game](./src/server/game) gameplay rules, session orchestration, and HTTP handlers
+- [src/server/providers](./src/server/providers) generation and scoring adapters
+- [tests](./tests) unit and UI coverage
 
-- Beginners who want to learn how to write better image prompts
-- Curious users who enjoy short, skill-based web games
-- Creators and hobbyists who want practical prompt practice, not just theory
+Useful entry points:
 
-Secondary audience:
-
-- Intermediate users who want to sharpen image description precision
-- Educators or workshop facilitators who want a lightweight training tool
-
-## Proposed Tech Direction
-
-This should be built as a modern web app with a clear path from MVP to a more scalable live product.
-
-Suggested stack direction:
-
-- Frontend: React with TypeScript
-- App framework: Next.js or another React-based full-stack framework with server actions or API routes
-- Styling: a utility-first CSS layer or a lightweight component system with strong design tokens
-- State management: local UI state plus a predictable shared store for gameplay and async request state
-- Backend: framework-hosted API layer for game sessions, generation requests, scoring, and progress persistence
-- Database: relational database for levels, attempts, results, and progression
-- Asset storage: object storage for target image metadata and generated result references
-- Model adapters:
-  - image generation provider abstraction
-  - similarity scoring provider abstraction
-- Analytics: event-based product analytics pipeline
-
-## Phase 0 Stack Decisions
-
-The first execution task is now decided and documented.
-
-- Framework: Next.js App Router with React and TypeScript
-- Package manager: pnpm
-- Database: PostgreSQL with Drizzle ORM and `drizzle-kit` migrations
-- Analytics provider: PostHog
-- Testing stack: Vitest, React Testing Library, and Playwright
-
-Detailed rationale and guardrails live in `docs/foundation/stack-decisions.md`.
-
-## Phase 0 AI Provider Decisions
-
-The second execution task is now decided and documented.
-
-- Baseline provider: OpenAI
-- Generation model: `gpt-image-1.5`
-- Scoring model: `gpt-5.4 mini`
-
-Detailed rationale, source links, and fallback notes live in `docs/foundation/ai-provider-decisions.md`.
-
-## Phase 0 Asset Storage Decision
-
-The third execution task is now decided and documented.
-
-- Storage provider: Amazon S3
-- Target assets: versioned bucket for curated level images
-- Generated outputs: private bucket for player attempt images served through signed access
-
-Detailed rationale and access-pattern notes live in `docs/foundation/asset-storage-decision.md`.
-
-## Phase 0 Retention Policy
-
-The fourth execution task is now decided and documented.
-
-- Target images: retained until content is explicitly replaced or removed
-- Generated attempt images: retained for 90 days, then hard-deleted
-- Database attempt metadata: retained longer than the generated image object
-
-Detailed lifecycle rules live in `docs/foundation/asset-retention-policy.md`.
-
-## Phase 0 Persistence Decision
-
-The fifth execution task is now decided and documented.
-
-- Progress is server-persisted in PostgreSQL
-- Identity is anonymous and browser-scoped in MVP
-- Resume is driven by an opaque HTTP-only session cookie
-
-Detailed persistence and session rules live in `docs/foundation/persistence-model.md`.
-
-## Suggested High-Level Architecture
-
-The product can be organized into a few clear domains:
-
-### Client App
-
-- Landing and onboarding flow
-- Level selection and progression UI
-- Active gameplay UI
-- Result, retry, and completion screens
-- Resume progress handling
-
-### Game Application Layer
-
-- Session lifecycle management
-- Level rules and thresholds
-- Attempt validation
-- Pass/fail resolution
-- Tip generation orchestration
-
-### Content Layer
-
-- Level definitions
-- Target image metadata
-- Difficulty settings
-- Tip heuristics and prompt coaching rules
-
-### Generation Layer
-
-- Accept player prompt
-- Send generation request to selected provider
-- Track request state
-- Store generated output and request metadata
-
-### Scoring Layer
-
-- Compare target and generated output
-- Normalize similarity output into a player-facing score
-- Return supporting breakdown data for future feedback improvements
-
-### Persistence Layer
-
-- User progress
-- Attempt history
-- Best scores
-- Resume state
-- Completion summaries
-
-## Suggested MVP Scope
-
-The MVP should prove the core learning loop before expanding content or adding social features.
-
-Recommended MVP scope:
-
-- Web app with landing page and start flow
-- Small curated level set
-- Single-player progression through sequential levels
-- Prompt entry with enforced character limit
-- Up to 3 attempts per level
-- Image generation integration through one provider
-- Similarity scoring integration through one provider or scoring approach
-- Threshold-based pass/fail logic
-- Basic targeted retry tips
-- Local or account-based progress persistence
-- Final summary screen after completing the MVP level set
-- Core analytics on funnel, attempts, pass rates, and retries
-
-Not required for MVP:
-
-- Daily challenges
-- Multiplayer or competitive modes
-- User-generated level packs
-- Prompt sharing
-- Rich scoring explainability
-- Advanced personalization
-
-## Future Ideas
-
-- More level packs with themed difficulty tracks
-- Daily challenge mode
-- Hint system with score penalties
-- Timed mode
-- Coach mode that explains why one prompt is stronger than another
-- Difficulty branches based on player performance
-- Seasonal content drops
-- Leaderboards or friend challenges
-- Accessibility-focused descriptive practice modes
-- Adaptive tip generation based on common player mistakes
+- [src/app/page.tsx](./src/app/page.tsx)
+- [src/app/play/page.tsx](./src/app/play/page.tsx)
+- [src/components/landing/landing-screen.tsx](./src/components/landing/landing-screen.tsx)
+- [src/components/game/active-level-screen.tsx](./src/components/game/active-level-screen.tsx)
 
 ## Local Setup
 
 ### Prerequisites
 
-- Node.js 22.x was used to verify the current scaffold
-- `pnpm` 10.33.0
-- PostgreSQL only when you want durable database-backed persistence outside the in-memory fallback
-- OpenAI credentials only when you want to enable the live generation or scoring providers
-- AWS credentials and S3 buckets are not required by the current repo runtime yet; the checked-in implementation still uses the local generated-output and target-asset roots described in `.env.example`
+- Node.js `22.x`
+- `pnpm` `10.33.0`
+- PostgreSQL only if you want durable database-backed persistence
+- OpenAI credentials only if you want live generation or scoring
 
-The app boots without external service credentials. Analytics is a no-op when PostHog variables are unset, and generation/scoring stay on the deterministic mock path unless the explicit OpenAI feature flags are enabled.
+The app runs without external credentials. When analytics variables are unset, PostHog is a no-op. When the OpenAI feature flags are unset, generation and scoring stay on the deterministic mock path.
 
 ### Install
 
@@ -234,17 +97,15 @@ cp .env.example .env.local
 pnpm env:check:preview
 ```
 
-Use `pnpm env:check:staging` and `pnpm env:check:production` to validate non-preview deployment environments before wiring branch deployments.
-
-### Run the App
+### Run
 
 ```bash
 pnpm dev
 ```
 
-Then open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+Then open the local URL printed by Next.js, usually [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
-### Run Tests
+### Test and Verify
 
 ```bash
 pnpm lint
@@ -259,65 +120,37 @@ Optional browser coverage:
 pnpm test:e2e
 ```
 
-## Development Workflow Suggestions
+## Environment Notes
 
-- Keep product behavior aligned with `PRD.md` before expanding scope.
-- Treat `TASKS.md` as the source for execution order and delivery tracking.
-- Build the app in small vertical slices and close one `TASKS.md` item at a time.
-- Keep model integrations behind clear interfaces so generation or scoring providers can be swapped later.
-- Add fixtures and deterministic test hooks early to make the gameplay loop testable without depending entirely on live model outputs.
-- Define content and thresholds in structured data rather than hard-coding them into UI components.
-- Run `pnpm env:check:preview` before opening preview-focused workflow changes, and run the staging/production variants before wiring real deployment envs.
+The most important runtime switches are:
 
-## Deployment Workflow
+- `DATABASE_URL`
+- `NEXT_PUBLIC_POSTHOG_HOST`
+- `NEXT_PUBLIC_POSTHOG_TOKEN`
+- `OPENAI_API_KEY`
+- `PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION`
+- `PIXEL_PROMPT_ENABLE_OPENAI_SCORING`
+- `PIXEL_PROMPT_GENERATED_OUTPUT_DIR`
+- `PIXEL_PROMPT_TARGET_ASSET_DIR`
 
-The repo now assumes this branch-to-environment flow:
-
-- pull requests and non-production branches: Vercel Preview plus the GitHub `CI` workflow
-- `staging`: long-lived staging environment
-- `main`: production
-
-The checked-in verification commands are:
+Preview env validation:
 
 ```bash
 pnpm env:check:preview
-pnpm env:check:staging
-pnpm env:check:production
 ```
 
-Detailed branch, environment, and resource rules live in `docs/foundation/deployment-assumptions.md`.
+This README intentionally stops short of deployment workflow details. It only documents the runtime contract needed for local development and product understanding.
 
-## Contribution Guidance
+## Current Limitations
 
-- Keep `PRD.md`, `README.md`, and `TASKS.md` aligned when behavior or workflow changes.
-- Run `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build` before landing non-trivial changes.
-- Add or update deterministic tests whenever you change gameplay rules, analytics emission, provider behavior, or seeded content.
-- Keep server-only env usage and provider access inside `src/server/**`.
-- Prefer documented, typed contracts over ad hoc payload shapes for gameplay, analytics, and provider boundaries.
+These are product and implementation limitations, not deployment instructions:
 
-## Project Documents
+- The shipped level set is intentionally small: three seeded levels
+- The mock provider path is the stable default; live provider quality still depends on calibration and asset strategy
+- Generated output persistence still assumes filesystem-backed storage in the checked-in runtime
+- Anonymous progress is browser-scoped; account systems are out of scope for the MVP
 
-The three root documents serve different purposes and should stay aligned:
+## Documentation
 
-- `PRD.md` defines the product: audience, goals, states, rules, requirements, and open questions.
-- `README.md` explains what the repository is, why the product matters, the proposed technical direction, and how to work in the project.
-- `TASKS.md` converts the product and technical direction into an execution plan with implementation-ready phases and checklists.
-
-Practical rule:
-
-- update `PRD.md` when product behavior changes
-- update `README.md` when repo usage, architecture, or developer workflow changes
-- update `TASKS.md` when scope, sequence, or delivery status changes
-
-## Current Status
-
-Current state of the repository:
-
-- product concept defined
-- three seeded levels are playable from landing through final summary
-- session-backed progression, replay, restart, and analytics are implemented
-- deterministic mock generation/scoring remains the default path for local and preview-safe flows
-- live OpenAI generation and scoring can be enabled explicitly through env flags
-- deployment env checks, CI preview gating, and deployment assumptions are now checked into the repo
-
-The next logical step is to keep hardening the MVP for limited external testing while preserving `TASKS.md` as the source of execution order.
+- [PRD.md](./PRD.md) is the product truth
+- [TASKS.md](./TASKS.md) is the execution history and current work log

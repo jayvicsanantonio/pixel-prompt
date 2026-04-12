@@ -29,6 +29,14 @@ The core learning model is observation plus iteration:
 - compare result against expectation
 - revise with better specificity
 
+Current MVP interpretation of this loop:
+
+- the landing screen communicates the premise in one view and includes a featured target preview
+- players can start a new run or resume an existing anonymous session
+- the active play screen keeps the target visible while the player writes
+- mobile layouts support enlarged target inspection
+- progression remains visible during play so unlocked and replayable levels are easy to understand
+
 ## Goals
 
 ### Primary Goals
@@ -208,6 +216,7 @@ Requirements:
 
 - Communicate the product in one screen or less.
 - Explain the challenge clearly: study the image, write a prompt, match the image.
+- Show a concrete example of the kind of target the player will be studying.
 - Provide obvious entry points for:
   - start game
   - resume progress when available
@@ -220,6 +229,7 @@ Requirements:
 - Start a new game session cleanly.
 - Load first available level or last incomplete level.
 - Establish session state for progress and attempts.
+- Persist that state anonymously in MVP without requiring account creation.
 
 ### 3. Active Level Experience
 
@@ -228,8 +238,10 @@ Requirements:
 - Display target image prominently.
 - Show level number and required score threshold.
 - Show attempts remaining.
+- Keep overall run progress visible while the player is on a level.
 - Show prompt input with clear character count and submission affordance.
 - Avoid clutter that distracts from image observation.
+- Reuse the same target-study surface language and interaction model introduced on landing.
 
 ### 4. Prompt Input
 
@@ -240,6 +252,7 @@ Requirements:
 - Prevent empty submission.
 - Preserve typed prompt when validation errors occur.
 - Optionally support keyboard-first input flow.
+- Prevent duplicate submits while a request is already in flight.
 
 ### 5. Image Generation
 
@@ -268,6 +281,7 @@ Requirements:
 - Tell player whether they passed.
 - If failed, provide actionable improvement tips for the next attempt.
 - Tips should point toward missing visual detail categories rather than generic encouragement.
+- Preserve the strongest attempt context when the player runs out of attempts on a level.
 
 ### 8. Retry Flow
 
@@ -285,6 +299,7 @@ Requirements:
 - Unlock the next level after passing.
 - Show clear success state and next action.
 - Persist best score, completion status, and attempt data.
+- Allow replay of cleared levels without reducing unlocked progression.
 
 ### 10. Failure After All Attempts
 
@@ -302,6 +317,7 @@ Requirements:
 - Save current unlocked level and relevant session progress.
 - Resume the player at the appropriate point on return.
 - Handle partially completed levels without corrupting progress state.
+- Resume should be session-cookie driven in MVP, not account driven.
 
 ### 12. Final Completion / Summary
 
@@ -314,6 +330,14 @@ Requirements:
   - best scores
   - improvement trend
 - Encourage replay or future content return.
+
+### 12a. Replay and Restart Recovery
+
+Requirements:
+
+- Failed levels should expose a restart path without deleting prior history.
+- Cleared levels should expose replay entry points from both progression and summary surfaces.
+- Restart and replay flows must not break resume or unlock invariants.
 
 ### 13. Expandable Content Model
 
@@ -471,7 +495,7 @@ Purpose:
 ### Score Model
 
 - Every valid attempt returns a normalized similarity score from 0 to 100.
-- The player-facing score may also be displayed as a percentage for readability.
+- The player-facing score is displayed as a percentage for readability.
 - Pass/fail is determined by whether score is greater than or equal to the level threshold.
 
 ### Threshold Rules
@@ -539,6 +563,7 @@ Purpose:
 
 - The system must emit analytics events for major user and system actions.
 - The system must track level starts, prompt submissions, scores, pass/fail outcomes, retries, and session completion.
+- The system should track resume-offered and resume-started events separately.
 
 ## Non-Functional Requirements
 
@@ -605,6 +630,7 @@ Purpose:
 - retry rate by level
 - level abandonment rate
 - resume rate
+- resume-offered rate
 - full run completion rate
 
 ### Learning and Quality Metrics
@@ -614,6 +640,7 @@ Purpose:
 - score improvement from first attempt to best attempt
 - percentage of players who improve after receiving tips
 - prompt length distribution
+- strongest attempt score on failed runs
 
 ### Operational Metrics
 
@@ -657,10 +684,9 @@ The MVP should be considered promising if:
 
 ### Open Questions
 
-- Should target images be fully static per level, or can later versions rotate targets within a level pool?
-- Should players see the target image during the entire attempt, or should some modes hide it after a short preview?
+- Should later versions rotate targets within a level pool once the MVP's static-per-level target model is no longer sufficient?
 - How should similarity scoring be calibrated so it feels fair to players even when outputs differ stylistically?
-- Should there be anonymous local progress only in MVP, or lightweight account support from the start?
+- When should the product add account-based identity on top of the MVP's anonymous session-backed progress?
 - What should happen when a provider returns low-quality or off-topic generations for an otherwise reasonable prompt?
 - How much scoring transparency should be shown to players in MVP versus later versions?
 - Should level completion require exact threshold pass only, or should there be medal tiers later?
@@ -672,11 +698,13 @@ To keep the first implementation grounded:
 
 - build a single-player web app
 - ship a small curated sequence of levels
+- show a featured target preview on landing
 - enforce the short prompt limit
 - support 3 attempts per level
 - use threshold-based pass/fail progression
 - provide actionable retry tips
 - save progress and allow resume
+- allow replay without reducing unlocked progression
 - instrument the full gameplay loop for analytics
 
 This gives the team a clear, testable foundation before adding more modes, social features, or advanced coaching systems.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { levels, uiCopy } from "@/content";
+import { TargetStudyFrame } from "@/components/game/target-study-frame";
 import { captureClientAnalyticsEvent } from "@/lib/analytics/client";
 import {
   toPlayerFacingScore,
@@ -627,24 +628,6 @@ export function ActiveLevelScreen({
     setScreenMode("active");
   }
 
-  function renderTargetStudyFrame(ariaLabel: string, expanded = false) {
-    return (
-      <div
-        className={`${styles.studyFrame} ${expanded ? styles.studyFrameExpanded : ""}`.trim()}
-        role="img"
-        aria-label={ariaLabel}
-      >
-        <div className={styles.wall} />
-        <div className={styles.table} />
-        <div className={styles.cloth} />
-        <div className={styles.bottle} />
-        <div className={styles.plate} />
-        <div className={styles.pearLeft} />
-        <div className={styles.pearRight} />
-      </div>
-    );
-  }
-
   function renderProgressRail() {
     return (
       <section className={styles.progressRail} aria-labelledby="run-progress-title">
@@ -904,6 +887,7 @@ export function ActiveLevelScreen({
               id="prompt"
               aria-describedby={promptDescribedBy}
               aria-invalid={feedback?.kind === "prompt"}
+              autoComplete="off"
               className={styles.textarea}
               name="prompt"
               placeholder={uiCopy.gameplay.active.placeholder}
@@ -926,7 +910,7 @@ export function ActiveLevelScreen({
               <p className={`${styles.counter} ${isOverLimit ? styles.counterOverLimit : ""}`.trim()} id="prompt-counter">
                 {characterCount}/{characterLimit} characters
               </p>
-              <button className={styles.button} type="submit">
+              <button className={styles.button} type="submit" disabled={isSubmitting}>
                 {uiCopy.gameplay.active.submitCta}
               </button>
             </div>
@@ -1418,7 +1402,7 @@ export function ActiveLevelScreen({
             <p className={styles.targetDescription}>{state.level.description}</p>
           </header>
 
-          {renderTargetStudyFrame(state.level.targetImage.alt)}
+          <TargetStudyFrame ariaLabel={state.level.targetImage.alt} />
 
           <p className={styles.targetCaption}>{uiCopy.gameplay.targetPanel.caption}</p>
 
@@ -1466,7 +1450,7 @@ export function ActiveLevelScreen({
               </button>
             </div>
 
-            {renderTargetStudyFrame(`Expanded view of ${state.level.targetImage.alt}`, true)}
+            <TargetStudyFrame ariaLabel={`Expanded view of ${state.level.targetImage.alt}`} expanded />
 
             <p className={styles.targetCaption} id="expanded-target-caption">
               {uiCopy.gameplay.targetPanel.expandedCaption}

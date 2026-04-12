@@ -64,6 +64,13 @@ if (requestedEnvironment === "staging" || requestedEnvironment === "production")
 const liveImageGenerationEnabled = readEnv("PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION") === "1";
 const liveScoringEnabled = readEnv("PIXEL_PROMPT_ENABLE_OPENAI_SCORING") === "1";
 
+if (requestedEnvironment === "preview" && liveScoringEnabled) {
+  requireEnv(
+    "PIXEL_PROMPT_TARGET_ASSET_DIR",
+    "required whenever live scoring is enabled so the scorer can read target assets during preview requests",
+  );
+}
+
 if (liveImageGenerationEnabled || liveScoringEnabled) {
   requireEnv("OPENAI_API_KEY", "required whenever either live OpenAI provider path is enabled");
 }
@@ -76,6 +83,10 @@ if (anyBucketConfigured) {
 
 if (requestedEnvironment === "preview" && !hasEnv("DATABASE_URL")) {
   warnings.push("DATABASE_URL is unset; preview will rely on the current in-memory/session-backed fallback.");
+}
+
+if (requestedEnvironment === "preview" && !hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR")) {
+  warnings.push("PIXEL_PROMPT_GENERATED_OUTPUT_DIR is unset; preview will use ephemeral temp storage for generated images.");
 }
 
 if (!liveImageGenerationEnabled || !liveScoringEnabled) {
