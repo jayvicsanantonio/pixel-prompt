@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getImageScoringProvider,
+  LmStudioImageScoringProvider,
   MOCK_IMAGE_PNG_BASE64,
   MOCK_PROVIDER_PROMPT_MARKERS,
   createMockImageScoringProvider,
@@ -15,7 +17,11 @@ import {
 
 describe("image scoring providers", () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
+  const originalEnableLmStudioScoring = process.env.PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING;
+  const originalEnableOpenAiScoring = process.env.PIXEL_PROMPT_ENABLE_OPENAI_SCORING;
+  const originalLmStudioApiKey = process.env.LMSTUDIO_API_KEY;
   const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+  const originalLmStudioBaseUrl = process.env.LMSTUDIO_BASE_URL;
   const originalTargetAssetDir = process.env.PIXEL_PROMPT_TARGET_ASSET_DIR;
   let generatedOutputDir = "";
   let targetAssetDir = "";
@@ -38,6 +44,30 @@ describe("image scoring providers", () => {
       delete process.env.OPENAI_API_KEY;
     } else {
       process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    if (originalEnableLmStudioScoring === undefined) {
+      delete process.env.PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING;
+    } else {
+      process.env.PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING = originalEnableLmStudioScoring;
+    }
+
+    if (originalEnableOpenAiScoring === undefined) {
+      delete process.env.PIXEL_PROMPT_ENABLE_OPENAI_SCORING;
+    } else {
+      process.env.PIXEL_PROMPT_ENABLE_OPENAI_SCORING = originalEnableOpenAiScoring;
+    }
+
+    if (originalLmStudioApiKey === undefined) {
+      delete process.env.LMSTUDIO_API_KEY;
+    } else {
+      process.env.LMSTUDIO_API_KEY = originalLmStudioApiKey;
+    }
+
+    if (originalLmStudioBaseUrl === undefined) {
+      delete process.env.LMSTUDIO_BASE_URL;
+    } else {
+      process.env.LMSTUDIO_BASE_URL = originalLmStudioBaseUrl;
     }
 
     if (originalGeneratedOutputDir === undefined) {
@@ -80,6 +110,16 @@ describe("image scoring providers", () => {
         passed: true,
       },
     });
+  });
+
+  it("prefers LM Studio scoring when explicitly enabled", async () => {
+    process.env.PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING = "1";
+    process.env.PIXEL_PROMPT_ENABLE_OPENAI_SCORING = "1";
+    process.env.OPENAI_API_KEY = "sk-test";
+
+    const provider = await getImageScoringProvider();
+
+    expect(provider.providerId).toBe("lmstudio");
   });
 
   it("returns a deterministic rate-limit failure from the mock scoring provider", async () => {
@@ -213,6 +253,136 @@ describe("image scoring providers", () => {
         },
       },
       reasoning: "The generated still life matches the warm tabletop setup but drifts on composition precision.",
+    });
+  });
+
+  it("turns LM Studio structured output into a normalized attempt score", async () => {
+    await persistGeneratedOutput({
+      assetKey: "generated/lmstudio/level-1/attempt-1.png",
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  normalizedScore: 73,
+                  reasoning: "The generated image stays close on subject and palette, with mild drift in composition.",
+                  breakdown: {
+                    medium: 75,
+                    subject: 77,
+                    context: 70,
+                    style: 72,
+                    materials: 71,
+                    textures: 68,
+                    shapes: 74,
+                    composition: 69,
+                    time_period: 80,
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const provider = new LmStudioImageScoringProvider({
+      fetchImpl,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life of pears and a bottle on a wooden table",
+      generatedImageAssetKey: "generated/lmstudio/level-1/attempt-1.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      ok: true,
+      provider: {
+        provider: "lmstudio",
+        model: process.env.LMSTUDIO_SCORING_MODEL || "google/gemma-4-26b-a4b",
+      },
+      score: {
+        normalized: 73,
+        passed: true,
+        threshold: 70,
+        breakdown: {
+          composition: 69,
+          medium: 75,
+        },
+      },
+      reasoning: "The generated image stays close on subject and palette, with mild drift in composition.",
+    });
+  });
+
+  it("maps LM Studio 429 responses to rate-limited failures", async () => {
+    await persistGeneratedOutput({
+      assetKey: "generated/lmstudio/level-1/attempt-429.png",
+      imageBase64: MOCK_IMAGE_PNG_BASE64,
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "rate_limit_exceeded",
+            message: "Too many local requests.",
+            type: "rate_limit_error",
+          },
+        }),
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const provider = new LmStudioImageScoringProvider({
+      fetchImpl,
+    });
+
+    const result = await provider.scoreImageMatch({
+      prompt: "sunlit still life",
+      generatedImageAssetKey: "generated/lmstudio/level-1/attempt-429.png",
+      targetImage: {
+        assetKey: "targets/level-1.png",
+        alt: "A sunlit still life arranged on a wooden table.",
+      },
+      threshold: 70,
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-429",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "rate_limited",
+      code: "rate_limit_exceeded",
+      message: "Too many local requests.",
+      retryable: true,
+      consumeAttempt: false,
     });
   });
 

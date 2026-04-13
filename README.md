@@ -58,6 +58,8 @@ Provider model:
 - Default local/runtime path: deterministic mock generation and mock scoring
 - Opt-in live generation: `gpt-image-1.5`
 - Opt-in live scoring: `gpt-5.4-mini`
+- Opt-in local image generation: ComfyUI + `FLUX.1-schnell`
+- Opt-in local scoring: LM Studio using an image-capable local model
 
 ## Repository Map
 
@@ -86,6 +88,8 @@ Useful entry points:
 - `pnpm` `10.33.0`
 - PostgreSQL only if you want durable database-backed persistence
 - OpenAI credentials only if you want live generation or scoring
+- ComfyUI only if you want local image generation
+- LM Studio only if you want local image scoring
 
 The app runs without external credentials. When analytics variables are unset, PostHog is a no-op. When the OpenAI feature flags are unset, generation and scoring stay on the deterministic mock path.
 
@@ -130,6 +134,13 @@ The most important runtime switches are:
 - `OPENAI_API_KEY`
 - `PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION`
 - `PIXEL_PROMPT_ENABLE_OPENAI_SCORING`
+- `PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION`
+- `COMFYUI_BASE_URL`
+- `COMFYUI_IMAGE_MODEL`
+- `COMFYUI_WORKFLOW_PATH`
+- `PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING`
+- `LMSTUDIO_BASE_URL`
+- `LMSTUDIO_SCORING_MODEL`
 - `PIXEL_PROMPT_GENERATED_OUTPUT_DIR`
 - `PIXEL_PROMPT_TARGET_ASSET_DIR`
 - `BLOB_READ_WRITE_TOKEN`
@@ -141,6 +152,44 @@ pnpm env:check:preview
 ```
 
 This README intentionally stops short of deployment workflow details. It only documents the runtime contract needed for local development and product understanding.
+
+### Local AI Setup
+
+For a fully local `dev` path:
+
+- keep OpenAI flags disabled
+- enable ComfyUI generation with `PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION=1`
+- enable LM Studio scoring with `PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING=1`
+
+Recommended `.env.local` additions:
+
+```bash
+PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION=1
+COMFYUI_BASE_URL=http://127.0.0.1:8188
+COMFYUI_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell
+COMFYUI_WORKFLOW_PATH=.config/comfyui/flux-schnell-api.json
+
+PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING=1
+LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
+LMSTUDIO_API_KEY=lm-studio
+LMSTUDIO_SCORING_MODEL=google/gemma-4-26b-a4b
+
+PIXEL_PROMPT_TARGET_ASSET_DIR=public
+PIXEL_PROMPT_GENERATED_OUTPUT_DIR=.pixel-prompt/generated-output
+```
+
+ComfyUI workflow requirements:
+
+- export a working FLUX.1-schnell workflow from ComfyUI using `Save (API Format)`
+- include a `{{PROMPT}}` placeholder anywhere the app should inject the player prompt
+- optionally include a `{{SEED}}` placeholder in any numeric seed field
+- the provider will submit the workflow, poll job history, and persist the first returned image
+
+LM Studio scoring requirements:
+
+- run LM Studio’s local server
+- load a vision-capable local model that supports image input and structured JSON output
+- the scorer sends the target image and the generated image together and expects strict JSON back
 
 ## Current Limitations
 

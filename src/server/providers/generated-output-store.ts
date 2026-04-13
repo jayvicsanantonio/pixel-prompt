@@ -24,6 +24,11 @@ interface PersistGeneratedOutputInput {
   imageBase64: string;
 }
 
+interface PersistGeneratedOutputBufferInput {
+  assetKey: string;
+  image: Buffer;
+}
+
 function normalizeAssetKey(assetKey: string) {
   const normalized = assetKey.replaceAll("\\", "/").replace(/^\/+/, "");
 
@@ -103,6 +108,16 @@ export function buildGeneratedOutputAssetKey(input: BuildGeneratedOutputAssetKey
 export async function persistGeneratedOutput(input: PersistGeneratedOutputInput) {
   const normalizedKey = normalizeAssetKey(input.assetKey);
   const imageBuffer = Buffer.from(input.imageBase64, "base64");
+
+  await persistGeneratedOutputBuffer({
+    assetKey: normalizedKey,
+    image: imageBuffer,
+  });
+}
+
+export async function persistGeneratedOutputBuffer(input: PersistGeneratedOutputBufferInput) {
+  const normalizedKey = normalizeAssetKey(input.assetKey);
+  const imageBuffer = input.image;
 
   if (shouldUseVercelBlobStore()) {
     const { put } = await import("@vercel/blob");

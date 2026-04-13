@@ -63,16 +63,22 @@ if (requestedEnvironment === "staging" || requestedEnvironment === "production")
 
 const liveImageGenerationEnabled = readEnv("PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION") === "1";
 const liveScoringEnabled = readEnv("PIXEL_PROMPT_ENABLE_OPENAI_SCORING") === "1";
+const comfyUiGenerationEnabled = readEnv("PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION") === "1";
+const lmStudioScoringEnabled = readEnv("PIXEL_PROMPT_ENABLE_LMSTUDIO_SCORING") === "1";
 
-if (requestedEnvironment === "preview" && liveScoringEnabled) {
+if (requestedEnvironment === "preview" && (liveScoringEnabled || lmStudioScoringEnabled)) {
   requireEnv(
     "PIXEL_PROMPT_TARGET_ASSET_DIR",
-    "required whenever live scoring is enabled so the scorer can read target assets during preview requests",
+    "required whenever a non-mock scoring path is enabled so the scorer can read target assets during preview requests",
   );
 }
 
 if (liveImageGenerationEnabled || liveScoringEnabled) {
   requireEnv("OPENAI_API_KEY", "required whenever either live OpenAI provider path is enabled");
+}
+
+if (comfyUiGenerationEnabled) {
+  requireEnv("COMFYUI_WORKFLOW_PATH", "required whenever the ComfyUI generation path is enabled");
 }
 
 const anyBucketConfigured = ["S3_TARGET_ASSET_BUCKET", "S3_GENERATED_OUTPUT_BUCKET"].some(hasEnv);
@@ -89,8 +95,12 @@ if (requestedEnvironment === "preview" && !hasEnv("BLOB_READ_WRITE_TOKEN") && !h
   warnings.push("BLOB_READ_WRITE_TOKEN and PIXEL_PROMPT_GENERATED_OUTPUT_DIR are unset; preview will use ephemeral temp storage for generated images (not persisted across deploys).");
 }
 
-if (!liveImageGenerationEnabled || !liveScoringEnabled) {
-  warnings.push("One or both live OpenAI provider flags are disabled; mock generation/scoring paths will remain active.");
+if (!liveImageGenerationEnabled && !comfyUiGenerationEnabled) {
+  warnings.push("No live image generation provider is enabled; mock image generation will remain active.");
+}
+
+if (!liveScoringEnabled && !lmStudioScoringEnabled) {
+  warnings.push("No live scoring provider is enabled; mock scoring will remain active.");
 }
 
 const summaryLines = [
@@ -101,6 +111,8 @@ const summaryLines = [
   `Generated output storage: ${hasEnv("BLOB_READ_WRITE_TOKEN") ? "vercel-blob" : hasEnv("PIXEL_PROMPT_GENERATED_OUTPUT_DIR") ? "local-filesystem" : "not configured"}`,
   `Live image generation: ${liveImageGenerationEnabled ? "enabled" : "disabled"}`,
   `Live scoring: ${liveScoringEnabled ? "enabled" : "disabled"}`,
+  `ComfyUI image generation: ${comfyUiGenerationEnabled ? "enabled" : "disabled"}`,
+  `LM Studio scoring: ${lmStudioScoringEnabled ? "enabled" : "disabled"}`,
 ];
 
 for (const line of summaryLines) {
