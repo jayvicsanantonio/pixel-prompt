@@ -1,9 +1,10 @@
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ComfyUiImageGenerationProvider,
   MOCK_IMAGE_PNG_BASE64,
   MOCK_PROVIDER_PROMPT_MARKERS,
   createMockImageGenerationProvider,
@@ -13,23 +14,48 @@ import {
 
 describe("image generation providers", () => {
   const originalApiKey = process.env.OPENAI_API_KEY;
+  const originalComfyUiBaseUrl = process.env.COMFYUI_BASE_URL;
+  const originalComfyUiWorkflowPath = process.env.COMFYUI_WORKFLOW_PATH;
+  const originalEnableComfyUiInTests = process.env.PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION;
   const originalEnableOpenAiInTests = process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION;
   const originalGeneratedOutputDir = process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR;
+  let comfyUiWorkflowPath = "";
   let generatedOutputDir = "";
 
   beforeEach(async () => {
     generatedOutputDir = path.join(process.cwd(), ".tmp", `vitest-generated-${Date.now()}`);
+    comfyUiWorkflowPath = path.join(process.cwd(), ".tmp", `vitest-comfyui-workflow-${Date.now()}.json`);
     process.env.PIXEL_PROMPT_GENERATED_OUTPUT_DIR = generatedOutputDir;
     await rm(generatedOutputDir, { recursive: true, force: true });
+    await rm(comfyUiWorkflowPath, { force: true });
   });
 
   afterEach(async () => {
     await rm(generatedOutputDir, { recursive: true, force: true });
+    await rm(comfyUiWorkflowPath, { force: true });
 
     if (originalApiKey === undefined) {
       delete process.env.OPENAI_API_KEY;
     } else {
       process.env.OPENAI_API_KEY = originalApiKey;
+    }
+
+    if (originalComfyUiBaseUrl === undefined) {
+      delete process.env.COMFYUI_BASE_URL;
+    } else {
+      process.env.COMFYUI_BASE_URL = originalComfyUiBaseUrl;
+    }
+
+    if (originalComfyUiWorkflowPath === undefined) {
+      delete process.env.COMFYUI_WORKFLOW_PATH;
+    } else {
+      process.env.COMFYUI_WORKFLOW_PATH = originalComfyUiWorkflowPath;
+    }
+
+    if (originalEnableComfyUiInTests === undefined) {
+      delete process.env.PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION;
+    } else {
+      process.env.PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION = originalEnableComfyUiInTests;
     }
 
     if (originalEnableOpenAiInTests === undefined) {
@@ -62,6 +88,29 @@ describe("image generation providers", () => {
 
     expect(provider.providerId).toBe("openai");
     expect(provider.modelRef.model).toBe(process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5");
+  });
+
+  it("prefers ComfyUI generation when explicitly enabled", async () => {
+    process.env.PIXEL_PROMPT_ENABLE_COMFYUI_IMAGE_GENERATION = "1";
+    process.env.COMFYUI_WORKFLOW_PATH = comfyUiWorkflowPath;
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.PIXEL_PROMPT_ENABLE_OPENAI_IMAGE_GENERATION = "1";
+    await writeFile(
+      comfyUiWorkflowPath,
+      JSON.stringify({
+        "6": {
+          inputs: {
+            text: "{{PROMPT}}",
+            seed: "{{SEED}}",
+          },
+          class_type: "KSampler",
+        },
+      }),
+    );
+
+    const provider = await getImageGenerationProvider();
+
+    expect(provider.providerId).toBe("comfyui");
   });
 
   it("keeps the mock provider outside tests when the OpenAI enable flag is off", async () => {
@@ -177,6 +226,143 @@ describe("image generation providers", () => {
     const generatedOutput = await readFile(path.join(generatedOutputDir, result.assetKey));
 
     expect(generatedOutput.length).toBeGreaterThan(0);
+  });
+
+  it("stores successful ComfyUI generations in the generated output store", async () => {
+    await writeFile(
+      comfyUiWorkflowPath,
+      JSON.stringify({
+        "6": {
+          inputs: {
+            text: "{{PROMPT}}",
+            seed: "{{SEED}}",
+          },
+          class_type: "KSampler",
+        },
+      }),
+    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            prompt_id: "prompt-1",
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            "prompt-1": {
+              outputs: {
+                "9": {
+                  images: [
+                    {
+                      filename: "flux-attempt.png",
+                      subfolder: "",
+                      type: "output",
+                    },
+                  ],
+                },
+              },
+              status: {
+                completed: true,
+                status_str: "success",
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+            },
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(Buffer.from(MOCK_IMAGE_PNG_BASE64, "base64"), {
+          status: 200,
+          headers: {
+            "content-type": "image/png",
+          },
+        }),
+      );
+    const provider = new ComfyUiImageGenerationProvider({
+      fetchImpl,
+      workflowPath: comfyUiWorkflowPath,
+    });
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://127.0.0.1:8188/prompt");
+    expect(result).toMatchObject({
+      ok: true,
+      provider: {
+        provider: "comfyui",
+        model: process.env.COMFYUI_IMAGE_MODEL || "black-forest-labs/FLUX.1-schnell",
+      },
+      revisedPrompt: "sunlit pears on a table",
+    });
+
+    if (!result.ok) {
+      throw new Error("Expected the ComfyUI provider to succeed.");
+    }
+
+    const generatedOutput = await readFile(path.join(generatedOutputDir, result.assetKey));
+
+    expect(generatedOutput.length).toBeGreaterThan(0);
+  });
+
+  it("returns a structured failure when the ComfyUI workflow is missing the prompt placeholder", async () => {
+    await writeFile(
+      comfyUiWorkflowPath,
+      JSON.stringify({
+        "6": {
+          inputs: {
+            text: "static prompt",
+          },
+          class_type: "KSampler",
+        },
+      }),
+    );
+    const provider = new ComfyUiImageGenerationProvider({
+      fetchImpl: vi.fn(),
+      workflowPath: comfyUiWorkflowPath,
+    });
+
+    const result = await provider.generateImage({
+      prompt: "sunlit pears on a table",
+      context: {
+        runId: "run-1",
+        levelId: "level-1",
+        attemptId: "attempt-1",
+        attemptNumber: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "technical_failure",
+      code: "comfyui_workflow_missing_prompt_placeholder",
+      message: `ComfyUI workflow "${comfyUiWorkflowPath}" must contain the {{PROMPT}} placeholder.`,
+      retryable: false,
+      consumeAttempt: false,
+    });
   });
 
   it("maps OpenAI moderation failures to content-policy rejections", async () => {

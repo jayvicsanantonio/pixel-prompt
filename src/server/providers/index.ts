@@ -1,9 +1,11 @@
 import "@/server/server-only";
 
 export * from "./contracts";
+export * from "./comfyui-image-generation";
 export * from "./generated-output-store";
 export * from "./image-generation";
 export * from "./image-scoring";
+export * from "./lmstudio-image-scoring";
 export * from "./mock-fixtures";
 export * from "./mock-image-generation";
 export * from "./mock-image-scoring";
