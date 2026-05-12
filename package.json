@@ -20,7 +20,7 @@
     "@next/env": "16.2.3",
     "@vercel/blob": "^2.3.3",
     "drizzle-orm": "^0.45.2",
-    "next": "16.2.3",
+    "next": "16.2.6",
     "pg": "^8.20.0",
     "posthog-js": "^1.364.1",
     "posthog-node": "^5.28.8",
